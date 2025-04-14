@@ -66,17 +66,8 @@ func fetchAIResponse(query string, conf *config.Config) tea.Cmd {
 			return ChatResponseMsg{"Error initializing AI adapter: " + err.Error(), err}
 		}
 
-		// Build request
-		request := &dto.GeneralOpenAIRequest{
-			Model: conf.ModelName,
-			Messages: []dto.Message{
-				{Role: "user"},
-			},
-			Temperature: utils.Ptr(0.7),
-			MaxTokens:   1000,
-		}
-		request.Messages[0].SetStringContent(query)
-
+		// Build request using the utils package
+		request := utils.BuildPrompt(query, conf, "chat")
 		// Execute request
 		ctx := context.Background()
 		response, err := adapter.ChatCompletion(ctx, request)

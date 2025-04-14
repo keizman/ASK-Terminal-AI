@@ -58,7 +58,7 @@ sys_prompt: ""                          # System prompt, WARNING: Please underst
 
 # Model parameters
 temperature: 0.7                        # Temperature for chat mode (0.0-1.0, lower is more deterministic)
-max_tokens: 0                           # Max tokens for chat mode (0 for unlimited)
+max_tokens: 3000                           # Max tokens for chat mode 
 
 # Provider configuration (currently only openai-compatible is supported)
 provider: "openai-compatible"           # AI provider type, no other options available yet
@@ -85,11 +85,11 @@ provider: "openai-compatible"           # AI provider type, no other options ava
 	}
 
 	// Add debug logging
-	fmt.Printf("Debug - Read config file: %s\n", configPath)
-	fmt.Printf("Debug - Config values: BaseURL=%s, APIKey=%s, Model=%s\n",
-		config.BaseURL,
-		config.APIKey,
-		config.ModelName)
+	// fmt.Printf("Debug - Read config file: %s\n", configPath)
+	// fmt.Printf("Debug - Config values: BaseURL=%s, APIKey=%s, Model=%s\n",
+	// 	config.BaseURL,
+	// 	config.APIKey,
+	// 	config.ModelName)
 
 	// Validate required fields
 	if config.APIKey == "" {
