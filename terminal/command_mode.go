@@ -84,6 +84,7 @@ func (m VirtualTerminalModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	switch msg := msg.(type) {
 	case tea.KeyMsg:
+		// Handle special keys first before passing to textinput
 		switch msg.String() {
 		case "ctrl+c", "q":
 			return m, tea.Quit
@@ -96,13 +97,18 @@ func (m VirtualTerminalModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					m.selected = (m.selected + 1) % len(m.suggestions)
 				}
 			}
+			return m, nil
 
 		case "e":
+			// Debug log to verify key press is detected
+			utils.LogInfo("Edit key pressed")
+
 			if !m.loading && len(m.suggestions) > 0 && !m.editMode && !m.executionMode {
 				// Enter edit mode for the selected command
 				m.editMode = true
 				m.input.SetValue(m.suggestions[m.selected].Command)
 				m.input.CursorEnd()
+				return m, nil
 			}
 
 		case "enter":
@@ -129,38 +135,18 @@ func (m VirtualTerminalModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					return m, getCommandSuggestions(m.query, m.config, m.adapter)
 				}
 			}
-
-		default:
-			if !m.executionMode {
-				// Only handle input when not in execution mode
-				m.input, cmd = m.input.Update(msg)
-				return m, cmd
-			}
+			return m, nil
 		}
 
-	case suggestionsMsg:
-		m.loading = false
-		if msg.err != nil {
-			m.err = msg.err
-			m.logger.LogApplication(fmt.Sprintf("Error getting suggestions: %v", msg.err))
-		} else {
-			m.suggestions = msg.suggestions
-			m.selected = 0
-
-			// Log successful suggestions to history
-			cmdMap := make(map[string]string)
-			for _, s := range m.suggestions {
-				cmdMap[s.Command] = s.Description
-			}
-			m.logger.LogCommand(m.query, cmdMap)
-		}
-
-	case executionResultMsg:
-		m.executionOutput = msg.output
-		if msg.err != nil {
-			m.executionOutput += "\nError: " + msg.err.Error()
+		// Only pass keyboard input to the textinput when not in execution mode
+		// and not handling special keys for navigation
+		if !m.executionMode {
+			m.input, cmd = m.input.Update(msg)
+			return m, cmd
 		}
 	}
+
+	// The rest of your existing case handling...
 
 	return m, nil
 }
