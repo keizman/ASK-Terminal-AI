@@ -73,7 +73,12 @@ func (a *OpenAIAdapter) ChatCompletion(ctx context.Context, request *dto.General
 	if resp.StatusCode != http.StatusOK {
 		var errResp dto.GeneralErrorResponse
 		if err := json.Unmarshal(body, &errResp); err == nil {
-			return nil, fmt.Errorf("API error: %s", errResp.ToMessage())
+			// Print full error details
+			log.Printf("Full API error response: %s", string(body))
+			return nil, fmt.Errorf("API error: %s (Status code: %d) - Error: %+v",
+				errResp.ToMessage(),
+				resp.StatusCode,
+				errResp)
 		}
 		return nil, fmt.Errorf("unexpected status code: %d, body: %s", resp.StatusCode, string(body))
 	}
@@ -115,11 +120,15 @@ func (a *OpenAIAdapter) ChatCompletionStream(ctx context.Context, request *dto.G
 	if resp.StatusCode != http.StatusOK {
 		defer resp.Body.Close()
 		body, _ := io.ReadAll(resp.Body)
+		log.Printf("Full API error response (stream): %s", string(body))
 		var errResp dto.GeneralErrorResponse
 		if err := json.Unmarshal(body, &errResp); err == nil {
-			return nil, fmt.Errorf("API error: %s", errResp.ToMessage())
+			return nil, fmt.Errorf("API error: %s (Status code: %d) - Error: %+v",
+				errResp.ToMessage(),
+				resp.StatusCode,
+				errResp)
 		}
-		return nil, fmt.Errorf("unexpected status code: %d", resp.StatusCode)
+		return nil, fmt.Errorf("unexpected status code: %d, body: %s", resp.StatusCode, string(body))
 	}
 
 	responseChannel := make(chan *dto.ChatCompletionsStreamResponse)
