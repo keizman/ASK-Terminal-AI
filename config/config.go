@@ -80,7 +80,7 @@ provider: "openai-compatible"           # AI provider type, no other options ava
 	fmt.Printf("Debug - Read config file: %s\n", configPath)
 	fmt.Printf("Debug - Config values: BaseURL=%s, APIKey=%s, Model=%s\n",
 		config.BaseURL,
-		config.APIKey[:3]+"...", // Show only first 3 chars of API key for safety
+		config.APIKey, // Show only first 3 chars of API key for safety
 		config.ModelName)
 
 	// Validate required fields
