@@ -15,12 +15,12 @@ import (
 
 // Config holds application configuration
 type Config struct {
-	BaseURL     string `mapstructure:"base_url"`
-	APIKey      string `mapstructure:"api_key"`
-	ModelName   string `mapstructure:"model_name"`
-	PrivateMode bool   `mapstructure:"private_mode"`
-	SysPrompt   string `mapstructure:"sys_prompt"`
-	Provider    string // AI provider name
+	BaseURL     string `yaml:"base_url"`     // Changed from mapstructure
+	APIKey      string `yaml:"api_key"`      // Changed from mapstructure
+	ModelName   string `yaml:"model_name"`   // Changed from mapstructure
+	PrivateMode bool   `yaml:"private_mode"` // Changed from mapstructure
+	SysPrompt   string `yaml:"sys_prompt"`   // Changed from mapstructure
+	Provider    string `yaml:"provider"`     // Added yaml tag
 }
 
 // LoadConfig loads configuration from the specified path
