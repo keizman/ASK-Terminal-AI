@@ -4,15 +4,11 @@ import (
 	"crypto/aes"
 	"crypto/cipher"
 	"crypto/rand"
-	"crypto/sha256"
 	"encoding/base64"
 	"fmt"
 	"io"
-
-	// "os"
-	"strings"
-
-	"golang.org/x/crypto/argon2"
+	"os"
+	"path/filepath"
 )
 
 const (
@@ -22,14 +18,14 @@ const (
 // EncryptAPIKey encrypts the API key if it's not already encrypted
 func EncryptAPIKey(apiKey string) (string, error) {
 	// Check if already encrypted
-	if strings.HasPrefix(apiKey, encryptionPrefix) {
+	if len(apiKey) > 6 && apiKey[:6] == encryptionPrefix {
 		return apiKey, nil
 	}
 
-	// Generate device-specific encryption key
-	deviceKey, err := getDeviceKey()
+	// Get or create encryption key
+	deviceKey, err := getOrCreateDeviceKey()
 	if err != nil {
-		return "", fmt.Errorf("failed to generate device key: %w", err)
+		return "", fmt.Errorf("failed to get device key: %w", err)
 	}
 
 	// Encrypt the API key
@@ -42,19 +38,19 @@ func EncryptAPIKey(apiKey string) (string, error) {
 }
 
 // DecryptAPIKey decrypts the API key if it's encrypted
-func DecryptAPIKey(apiKey string) (string, error) {
-	// Check if encrypted
-	if !strings.HasPrefix(apiKey, encryptionPrefix) {
-		return apiKey, nil
+func DecryptAPIKey(encryptedKey string) (string, error) {
+	// Check if encrypted with our prefix
+	if len(encryptedKey) <= 6 || encryptedKey[:6] != encryptionPrefix {
+		return encryptedKey, nil
 	}
 
 	// Extract the encrypted part
-	encryptedPart := strings.TrimPrefix(apiKey, encryptionPrefix)
+	encryptedPart := encryptedKey[6:]
 
-	// Generate device-specific encryption key
-	deviceKey, err := getDeviceKey()
+	// Get the encryption key (should be the same key used for encryption)
+	deviceKey, err := getOrCreateDeviceKey()
 	if err != nil {
-		return "", fmt.Errorf("failed to generate device key: %w", err)
+		return "", fmt.Errorf("failed to get device key: %w", err)
 	}
 
 	// Decrypt the API key
@@ -66,45 +62,40 @@ func DecryptAPIKey(apiKey string) (string, error) {
 	return decrypted, nil
 }
 
-// getDeviceKey generates a device-specific key using hardware identifiers
-func getDeviceKey() ([]byte, error) {
-	// Get machine ID or hardware identifier
-	machineID, err := getMachineID()
+// getOrCreateDeviceKey gets an existing key or creates and stores a new one
+func getOrCreateDeviceKey() ([]byte, error) {
+	// Get path to store the encryption key
+	homeDir, err := os.UserHomeDir()
 	if err != nil {
 		return nil, err
 	}
 
-	// Generate key using Argon2id (more resistant to hardware acceleration attacks)
-	key := argon2.IDKey([]byte(machineID), nil, 1, 64*1024, 4, 32)
+	keyDir := filepath.Join(homeDir, ".config", "askta")
+	keyPath := filepath.Join(keyDir, ".encryption-key")
+
+	// Try to read existing key
+	if keyData, err := os.ReadFile(keyPath); err == nil && len(keyData) >= 32 {
+		// Use existing key
+		return keyData[:32], nil
+	}
+
+	// Generate new random key
+	key := make([]byte, 32) // 256-bit key
+	if _, err := io.ReadFull(rand.Reader, key); err != nil {
+		return nil, err
+	}
+
+	// Ensure directory exists
+	if err := os.MkdirAll(keyDir, 0700); err != nil {
+		return nil, err
+	}
+
+	// Store the key for future use
+	if err := os.WriteFile(keyPath, key, 0600); err != nil {
+		return nil, err
+	}
+
 	return key, nil
-}
-
-// getMachineID gets a unique machine identifier
-func getMachineID() (string, error) {
-	// On Windows, try to get the MachineGUID from registry
-	// On Linux/macOS, try to get machine-id from /etc/machine-id or /var/lib/dbus/machine-id
-	// Fallback to hostname if the above methods fail
-
-	// var machineID string
-
-	// Try to get hostname as fallback
-	// hostname, err := os.Hostname()
-	// if err == nil {
-	// 	machineID = hostname
-	// } else {
-	// 	// If even hostname fails, use a fixed string + username as last resort
-	// 	username := os.Getenv("USER")
-	// 	if username == "" {
-	// 		username = os.Getenv("USERNAME")
-	// 	}
-	// 	machineID = "askta-" + username
-	// }
-
-	// ensure machineID is unique and consistent
-	machineID := "askta-"
-	// Hash the machine ID to get a consistent length value
-	hash := sha256.Sum256([]byte(machineID))
-	return fmt.Sprintf("%x", hash), nil
 }
 
 // encrypt encrypts data using AES-GCM
