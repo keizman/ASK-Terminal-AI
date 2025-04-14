@@ -126,7 +126,7 @@ provider: "openai-compatible"           # AI provider type, no other options ava
 	decryptedKey := "" // Initialize decryptedKey
 	if len(config.APIKey) > 6 && config.APIKey[:6] == "encry_" {
 		// Decrypt API key
-		decryptedKey, err = security.DecryptAPIKey(config.APIKey[6:])
+		decryptedKey, err = security.DecryptAPIKey(config.APIKey)
 		if err != nil {
 			return nil, err
 		}
