@@ -4,6 +4,7 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"strconv"
 	"strings"
 
 	"ask_terminal/config"
@@ -21,13 +22,38 @@ func main() {
 	baseURL := flag.String("u", "", "API base URL")
 	apiKey := flag.String("k", "", "API key")
 	sysPrompt := flag.String("s", "", "System prompt")
+
+	// Define temperature and maxTokens flags
+	var temperatureFlag float64
+	var temperatureProvided bool
+	flag.Float64Var(&temperatureFlag, "temp", 0, "Temperature (0.0-1.0)")
+
+	var maxTokensFlag uint
+	var maxTokensProvided bool
+	flag.UintVar(&maxTokensFlag, "max-tokens", 0, "Max tokens (0 for unlimited)")
+
 	privateMode := flag.Bool("private-mode", false, "Enable private mode")
 	showVersion := flag.Bool("v", false, "Show version information")
 	showHelp := flag.Bool("h", false, "Show help information")
 	showHistory := flag.Bool("show", false, "Show command history")
 	interactiveMode := flag.Bool("i", false, "Use interactive conversation mode")
 
+	// Custom flag parsing to detect if flags were actually provided
+	oldUsage := flag.CommandLine.Usage
+	flag.CommandLine.Usage = func() {}
+
 	flag.Parse()
+	flag.CommandLine.Usage = oldUsage
+
+	// Check which flags were provided by examining original args
+	for _, arg := range os.Args {
+		if arg == "-temp" || arg == "--temp" {
+			temperatureProvided = true
+		}
+		if arg == "-max-tokens" || arg == "--max-tokens" {
+			maxTokensProvided = true
+		}
+	}
 
 	// Show version and exit if requested
 	if *showVersion {
@@ -71,6 +97,17 @@ func main() {
 	if *sysPrompt != "" {
 		args["sys_prompt"] = *sysPrompt
 	}
+
+	// Only include temperature if it was explicitly provided
+	if temperatureProvided {
+		args["temperature"] = strconv.FormatFloat(temperatureFlag, 'f', -1, 64)
+	}
+
+	// Only include max_tokens if it was explicitly provided
+	if maxTokensProvided {
+		args["max_tokens"] = strconv.FormatUint(uint64(maxTokensFlag), 10)
+	}
+
 	if *privateMode {
 		args["private_mode"] = "true"
 	}
@@ -112,6 +149,8 @@ Options:
   -u, --url URL           Temporarily specify API base URL
   -k, --key KEY           Temporarily specify API key
   -s, --sys-prompt TEXT   Temporarily specify system prompt
+  --temp FLOAT            Temporarily specify temperature (0.0-1.0)
+  --max-tokens INT        Temporarily specify max tokens (0 for unlimited)
   --private-mode          Enable privacy mode
   -v, --version           Show version information
   -h, --help              Show this help message
@@ -121,7 +160,7 @@ Options:
 Examples:
   ask "how to find large files"
   ask -i "explain docker volumes"
-  ask --model gpt-4 "optimize Postgres query"`)
+  ask --model gpt-4 --temp 0.8 "optimize Postgres query"`)
 }
 
 // showCommandHistory displays the command history

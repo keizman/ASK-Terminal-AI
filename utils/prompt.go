@@ -26,13 +26,18 @@ func BuildPrompt(userQuery string, conf *config.Config, mode string) *dto.Genera
 		userMessage.SetStringContent(userQuery)
 	}
 
-	// Set different temperatures based on mode
-	var temperature float64 = 0.7 // Default for conversation mode
-	maxTokens := uint(0)          // Unlimited for conversation mode
+	// Set up parameters based on mode
+	var temperature float64
+	var maxTokens uint
 
 	if mode == "terminal" {
-		temperature = 0.1 // Lower temperature for more deterministic command suggestions
+		// For terminal mode, always use these specific values
+		temperature = 0.0 // Lower temperature for more deterministic command suggestions
 		maxTokens = 500   // Limit token usage for command suggestions
+	} else {
+		// For conversation mode, use config values
+		temperature = conf.Temperature
+		maxTokens = conf.MaxTokens
 	}
 
 	// Create JSON response format for terminal mode

@@ -1,12 +1,12 @@
 package config
 
 import (
-	// "errors"
-
 	"fmt"
 	"io/ioutil"
 	"os"
 	"path/filepath"
+	"strconv"
+	"strings"
 
 	"ask_terminal/security"
 
@@ -15,12 +15,14 @@ import (
 
 // Config holds application configuration
 type Config struct {
-	BaseURL     string `yaml:"base_url"`     // Changed from mapstructure
-	APIKey      string `yaml:"api_key"`      // Changed from mapstructure
-	ModelName   string `yaml:"model_name"`   // Changed from mapstructure
-	PrivateMode bool   `yaml:"private_mode"` // Changed from mapstructure
-	SysPrompt   string `yaml:"sys_prompt"`   // Changed from mapstructure
-	Provider    string `yaml:"provider"`     // Added yaml tag
+	BaseURL     string  `yaml:"base_url"`
+	APIKey      string  `yaml:"api_key"`
+	ModelName   string  `yaml:"model_name"`
+	PrivateMode bool    `yaml:"private_mode"`
+	SysPrompt   string  `yaml:"sys_prompt"`
+	Provider    string  `yaml:"provider"`
+	Temperature float64 `yaml:"temperature"` // Temperature for generation
+	MaxTokens   uint    `yaml:"max_tokens"`  // Max tokens for generation
 }
 
 // LoadConfig loads configuration from the specified path
@@ -54,6 +56,10 @@ model_name: "gpt-4o-mini"               # Default AI model to use
 private_mode: false                     # Set to true to not send directory structure
 sys_prompt: ""                          # System prompt, WARNING: Please understand what you're modifying before making changes
 
+# Model parameters
+temperature: 0.7                        # Temperature for chat mode (0.0-1.0, lower is more deterministic)
+max_tokens: 0                           # Max tokens for chat mode (0 for unlimited)
+
 # Provider configuration (currently only openai-compatible is supported)
 provider: "openai-compatible"           # AI provider type, no other options available yet
 `
@@ -82,7 +88,7 @@ provider: "openai-compatible"           # AI provider type, no other options ava
 	fmt.Printf("Debug - Read config file: %s\n", configPath)
 	fmt.Printf("Debug - Config values: BaseURL=%s, APIKey=%s, Model=%s\n",
 		config.BaseURL,
-		config.APIKey, // Show only first 3 chars of API key for safety
+		config.APIKey,
 		config.ModelName)
 
 	// Validate required fields
@@ -94,6 +100,27 @@ provider: "openai-compatible"           # AI provider type, no other options ava
 		// Set default model
 		config.ModelName = "gpt-4o-mini"
 	}
+
+	// Set default value for temperature if not provided in config
+	// Use a default value of 0.7 only if temperature is not set at all
+	if config.Temperature == 0 {
+		// Check if temperature actually exists in the config file
+		var tempFound bool
+		yamlData := string(data)
+		for _, line := range strings.Split(yamlData, "\n") {
+			if strings.Contains(line, "temperature:") {
+				tempFound = true
+				break
+			}
+		}
+
+		if !tempFound {
+			// Only set default if not found in config at all
+			config.Temperature = 0.7
+		}
+	}
+
+	// MaxTokens of 0 is valid (unlimited) so no default needed
 
 	// Check if API key needs decryption
 	decryptedKey := "" // Initialize decryptedKey
@@ -148,6 +175,20 @@ func (c *Config) MergeWithArgs(args map[string]string) {
 
 	if sysPrompt, ok := args["sys_prompt"]; ok && sysPrompt != "" {
 		c.SysPrompt = sysPrompt
+	}
+
+	// Only override temperature if explicitly provided
+	if tempStr, ok := args["temperature"]; ok {
+		if temp, err := strconv.ParseFloat(tempStr, 64); err == nil {
+			c.Temperature = temp
+		}
+	}
+
+	// Only override max_tokens if explicitly provided
+	if tokensStr, ok := args["max_tokens"]; ok {
+		if tokens, err := strconv.ParseUint(tokensStr, 10, 32); err == nil {
+			c.MaxTokens = uint(tokens)
+		}
 	}
 
 	if _, ok := args["private_mode"]; ok {

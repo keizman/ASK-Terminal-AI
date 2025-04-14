@@ -20,6 +20,8 @@ var (
 	baseURL     string
 	apiKey      string
 	sysPrompt   string
+	temperature float64
+	maxTokens   uint
 	privateMode bool
 	showHistory bool
 )
@@ -45,8 +47,36 @@ var rootCmd = &cobra.Command{
 			os.Exit(1)
 		}
 
-		// Apply command line overrides
-		applyConfigOverrides(conf)
+		// Apply command line overrides with flag changed checks
+		if modelName != "" {
+			conf.ModelName = modelName
+		}
+		if provider != "" {
+			conf.Provider = provider
+		}
+		if baseURL != "" {
+			conf.BaseURL = baseURL
+		}
+		if apiKey != "" {
+			conf.APIKey = apiKey
+		}
+		if sysPrompt != "" {
+			conf.SysPrompt = sysPrompt
+		}
+
+		// Only override temperature if the flag was changed
+		if cmd.Flags().Changed("temp") {
+			conf.Temperature = temperature
+		}
+
+		// Only override max_tokens if the flag was changed
+		if cmd.Flags().Changed("max-tokens") {
+			conf.MaxTokens = maxTokens
+		}
+
+		if privateMode {
+			conf.PrivateMode = true
+		}
 
 		// Check if a query is provided
 		if len(args) > 0 {
@@ -62,12 +92,19 @@ var rootCmd = &cobra.Command{
 }
 
 func init() {
+	// Existing flags
 	rootCmd.PersistentFlags().StringVarP(&cfgFile, "config", "c", "", "Config file path")
 	rootCmd.PersistentFlags().StringVarP(&modelName, "model", "m", "", "Model name to use")
 	rootCmd.PersistentFlags().StringVarP(&provider, "provider", "p", "", "AI provider (openai-compatible)")
 	rootCmd.PersistentFlags().StringVarP(&baseURL, "url", "u", "", "API base URL")
 	rootCmd.PersistentFlags().StringVarP(&apiKey, "key", "k", "", "API key")
 	rootCmd.PersistentFlags().StringVarP(&sysPrompt, "sys-prompt", "s", "", "System prompt")
+
+	// Add temperature and maxTokens flags (without trying to set Changed callback)
+	rootCmd.PersistentFlags().Float64Var(&temperature, "temp", 0, "Temperature (0.0-1.0)")
+	rootCmd.PersistentFlags().UintVar(&maxTokens, "max-tokens", 0, "Max tokens (0 for unlimited)")
+
+	// Existing boolean flags
 	rootCmd.PersistentFlags().BoolVar(&privateMode, "private-mode", false, "Enable private mode")
 	rootCmd.PersistentFlags().BoolVar(&showHistory, "show", false, "Show recent command history")
 }
@@ -76,28 +113,6 @@ func Execute() {
 	if err := rootCmd.Execute(); err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
-	}
-}
-
-// applyConfigOverrides applies command line overrides to the config
-func applyConfigOverrides(conf *config.Config) {
-	if modelName != "" {
-		conf.ModelName = modelName
-	}
-	if provider != "" {
-		conf.Provider = provider
-	}
-	if baseURL != "" {
-		conf.BaseURL = baseURL
-	}
-	if apiKey != "" {
-		conf.APIKey = apiKey
-	}
-	if sysPrompt != "" {
-		conf.SysPrompt = sysPrompt
-	}
-	if privateMode {
-		conf.PrivateMode = true
 	}
 }
 
