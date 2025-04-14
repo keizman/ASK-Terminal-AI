@@ -102,7 +102,7 @@ func LoadConfig(configPath string) (*Config, error) {
 		}
 
 		// Update config file with encrypted key
-		config.APIKey = "encry_" + encryptedKey
+		config.APIKey = encryptedKey
 		newData, err := yaml.Marshal(&config)
 		if err != nil {
 			return nil, err
