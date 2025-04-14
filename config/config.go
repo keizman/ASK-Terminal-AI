@@ -78,7 +78,7 @@ provider: "openai-compatible"           # AI provider type, no other options ava
 
 	// Validate required fields
 	if config.APIKey == "" {
-		return nil, fmt.Errorf("api_key is required in configuration: %s", config.APIKey)
+		return nil, fmt.Errorf("api_key is required in configuration: %s,%s, %s", config.APIKey, config.BaseURL, config.ModelName)
 	}
 
 	if config.ModelName == "" {
