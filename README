@@ -1,0 +1,144 @@
+# ASK Terminal AI
+
+ASK Terminal AI is a command-line tool that allows users to quickly get and execute shell commands using AI or interact directly with AI in the terminal. It provides both a **virtual terminal mode** for command suggestions and a **conversation mode** for general queries.
+
+---
+
+## Prerequisites
+
+- **Go:** Version 1.18 or higher  
+- **Git**
+
+---
+
+## Building from Source
+
+1. **Clone the repository:**
+   ```bash
+   git clone https://github.com/[username]/ask-terminal.git
+   # Or if you already have the code:
+   cd ask-terminal
+   ```
+
+2. **Build the binary:**
+   ```bash
+   go build -o askta main.go
+   ```
+
+3. **Make the binary executable:**
+   ```bash
+   chmod +x askta
+   ```
+
+4. **Optionally install to the system path:**
+   ```bash
+   sudo mv askta /usr/local/bin/ask
+   ```
+
+---
+
+## Configuration
+
+Before using ASK Terminal AI, you need to create a configuration file.
+
+1. **Create a configuration directory:**
+   ```bash
+   mkdir -p ~/.config/askta
+   ```
+
+2. **Create a `config.yaml` file:**
+   ```bash
+   nano ~/.config/askta/config.yaml
+   ```
+
+3. **Add the following content (replace with your actual values):**
+   ```yaml
+   # AI service configuration
+   base_url: "https://api.openai.com/v1/"  # API base URL
+   api_key: "your-api-key"                 # API key
+   model_name: "gpt-4o-mini"               # Model to use
+
+   # Feature configuration
+   private_mode: false                     # Privacy mode
+   sys_prompt: "I'm using Linux"           # Custom system prompt
+
+   # Provider configuration
+   provider: "openai-compatible"           # Currently only supports openai-compatible
+   ```
+
+4. **Save the file:** Use `Ctrl+O`, press `Enter`, then `Ctrl+X` to exit nano.
+
+---
+
+## Usage
+
+### Virtual Terminal Mode (Command Suggestions)
+
+- To get AI-suggested commands, type:
+  ```bash
+  ask 
+  ```
+  Then, enter a query like:
+  ```bash
+  how to find the largest files on my system
+  ```
+
+- You'll get a list of suggested commands. Here are the key bindings:
+  - **Arrow keys (↑/↓):** Navigate suggestions
+  - **`e`**: Edit a command
+  - **Enter:** Execute the selected command
+  - **`q` or `Ctrl+C`:** Exit
+
+---
+
+### Conversation Mode
+
+- To have a conversation with the AI, use:
+  ```bash
+  ask -i "explain the difference between grep and awk"
+  ```
+
+---
+
+### Options
+
+| Option               | Description                                                                 |
+|-----------------------|-----------------------------------------------------------------------------|
+| `-c, --config FILE`   | Specify configuration file location                                        |
+| `-m, --model NAME`    | Temporarily specify model to use                                           |
+| `-p, --provider NAME` | Temporarily specify AI provider (currently only openai-compatible)         |
+| `-u, --url URL`       | Temporarily specify API base URL                                           |
+| `-k, --key KEY`       | Temporarily specify API key                                                |
+| `-s, --sys-prompt TEXT` | Temporarily specify system prompt                                       |
+| `--private-mode`      | Enable privacy mode                                                       |
+| `-v, --version`       | Show version information                                                  |
+| `-h, --help`          | Show help information                                                     |
+| `-show`               | Show command history                                                      |
+
+---
+
+### Example with Options
+
+```bash
+ask --model gpt-4 --sys-prompt "I'm using Ubuntu 22.04" "how to install Docker"
+```
+
+---
+
+## Logs
+
+- **Command history:** `/tmp/askta_Chistory.log`  
+- **Application logs:** `/tmp/askta_run.log`
+
+---
+
+## Security Notes
+
+- **API keys** are stored encrypted on disk.
+- Use `--private-mode` to avoid sending directory structure in queries.
+
+---
+
+## License
+
+[Apache 2.0](https://www.apache.org/licenses/LICENSE-2.0)
