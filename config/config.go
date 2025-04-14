@@ -73,7 +73,7 @@ provider: "openai-compatible"           # AI provider type, no other options ava
 
 	// Read config file
 	data, err := ioutil.ReadFile(configPath)
-	fmt.Printf("Debug - Read data: %s\n %s", data, err)
+	// fmt.Printf("Debug - Read data: %s\n %s", data, err)
 	if err != nil {
 		return nil, err
 	}
