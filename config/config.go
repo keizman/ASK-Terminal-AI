@@ -1,7 +1,7 @@
 package config
 
 import (
-	"errors"
+	// "errors"
 	"fmt"
 	"io/ioutil"
 	"os"
