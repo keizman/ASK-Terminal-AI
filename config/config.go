@@ -76,6 +76,13 @@ provider: "openai-compatible"           # AI provider type, no other options ava
 		return nil, err
 	}
 
+	// Add debug logging
+	fmt.Printf("Debug - Read config file: %s\n", configPath)
+	fmt.Printf("Debug - Config values: BaseURL=%s, APIKey=%s, Model=%s\n",
+		config.BaseURL,
+		config.APIKey[:3]+"...", // Show only first 3 chars of API key for safety
+		config.ModelName)
+
 	// Validate required fields
 	if config.APIKey == "" {
 		return nil, fmt.Errorf("api_key is required in configuration: %s,%s, %s", config.APIKey, config.BaseURL, config.ModelName)
