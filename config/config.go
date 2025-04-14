@@ -43,7 +43,6 @@ func LoadConfig(configPath string) (*Config, error) {
 
 		// Create a default config with comments
 		defaultConfigYaml := `# ASK Terminal AI Configuration
-# WARNING: Please understand what you're modifying before making changes
 
 # API service configuration
 base_url: "https://api.openai.com/v1/"  # API base URL for your provider
@@ -52,10 +51,10 @@ model_name: "gpt-4o-mini"               # Default AI model to use
 
 # Feature configuration
 private_mode: false                     # Set to true to not send directory structure
-sys_prompt: ""                          # Default system prompt to use
+sys_prompt: ""                          # System prompt, WARNING: Please understand what you're modifying before making changes
 
 # Provider configuration (currently only openai-compatible is supported)
-provider: "openai-compatible"           # AI provider type
+provider: "openai-compatible"           # AI provider type, no other options available yet
 `
 
 		if err := os.WriteFile(configPath, []byte(defaultConfigYaml), 0600); err != nil {
@@ -79,7 +78,7 @@ provider: "openai-compatible"           # AI provider type
 
 	// Validate required fields
 	if config.APIKey == "" {
-		return nil, errors.New("api_key is required in configuration")
+		return nil, fmt.Errorf("api_key is required in configuration: %s", config.APIKey)
 	}
 
 	if config.ModelName == "" {
