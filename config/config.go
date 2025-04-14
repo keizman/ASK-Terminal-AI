@@ -105,6 +105,7 @@ provider: "openai-compatible"           # AI provider type, no other options ava
 		}
 		config.APIKey = decryptedKey
 	} else {
+		originalKey := config.APIKey
 		// Encrypt API key for future use
 		encryptedKey, err := security.EncryptAPIKey(config.APIKey)
 		if err != nil {
@@ -124,7 +125,7 @@ provider: "openai-compatible"           # AI provider type, no other options ava
 		}
 
 		// Restore unencrypted key for current use
-		config.APIKey = decryptedKey
+		config.APIKey = originalKey
 	}
 
 	return &config, nil
