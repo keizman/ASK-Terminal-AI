@@ -80,11 +80,10 @@ func main() {
 	// Get query from command line arguments
 	query := strings.Join(flag.Args(), " ")
 
-	// If no query provided, print help message and exit
+	// If no query provided and not in interactive mode, start virtual terminal mode
 	if query == "" && !*interactiveMode {
-		fmt.Println("Error: No query provided.")
-		showHelpMessage()
-		os.Exit(1)
+		terminal.StartVirtualTerminalMode(conf)
+		os.Exit(0)
 	}
 
 	// Log application start

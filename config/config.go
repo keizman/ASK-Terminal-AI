@@ -41,22 +41,24 @@ func LoadConfig(configPath string) (*Config, error) {
 			return nil, fmt.Errorf("failed to create config directory: %w", err)
 		}
 
-		// Create a default config if file doesn't exist
-		defaultConfig := Config{
-			BaseURL:     "",
-			APIKey:      "",
-			ModelName:   "gpt-4o-mini",
-			PrivateMode: false,
-			SysPrompt:   "",
-			Provider:    "",
-		}
+		// Create a default config with comments
+		defaultConfigYaml := `# ASK Terminal AI Configuration
+# WARNING: Please understand what you're modifying before making changes
 
-		configData, err := yaml.Marshal(&defaultConfig)
-		if err != nil {
-			return nil, fmt.Errorf("failed to create default config: %w", err)
-		}
+# API service configuration
+base_url: "https://api.openai.com/v1/"  # API base URL for your provider
+api_key: "your-api-key"                 # Your API key (will be encrypted after first run)
+model_name: "gpt-4o-mini"               # Default AI model to use
 
-		if err := os.WriteFile(configPath, configData, 0600); err != nil {
+# Feature configuration
+private_mode: false                     # Set to true to not send directory structure
+sys_prompt: ""                          # Default system prompt to use
+
+# Provider configuration (currently only openai-compatible is supported)
+provider: "openai-compatible"           # AI provider type
+`
+
+		if err := os.WriteFile(configPath, []byte(defaultConfigYaml), 0600); err != nil {
 			return nil, fmt.Errorf("failed to write default config: %w", err)
 		}
 
