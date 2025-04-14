@@ -60,6 +60,18 @@ func (a *OpenAIAdapter) ChatCompletion(ctx context.Context, request *dto.General
 	req.Header.Set("Authorization", "Bearer "+a.apiKey)
 
 	resp, err := a.client.Do(req)
+	// Log the request and response for debugging
+	bodyPreview, _ := io.ReadAll(resp.Body)
+	resp.Body = io.NopCloser(bytes.NewBuffer(bodyPreview)) // Reassign body for further use
+
+	// Replace the logging line after the client.Do(req) call with:
+
+	log.Printf("Request URL: %s", url)
+	log.Printf("Request Headers: %+v", req.Header)
+	log.Printf("Request Body: %s", string(jsonData)) // We already have the request body in jsonData
+	log.Printf("Response Status: %d", resp.StatusCode)
+	log.Printf("Response Body: %s", string(bodyPreview))
+
 	if err != nil {
 		return nil, fmt.Errorf("failed to send request: %w", err)
 	}
