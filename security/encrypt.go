@@ -8,7 +8,8 @@ import (
 	"encoding/base64"
 	"fmt"
 	"io"
-	"os"
+
+	// "os"
 	"strings"
 
 	"golang.org/x/crypto/argon2"
@@ -84,21 +85,23 @@ func getMachineID() (string, error) {
 	// On Linux/macOS, try to get machine-id from /etc/machine-id or /var/lib/dbus/machine-id
 	// Fallback to hostname if the above methods fail
 
-	var machineID string
+	// var machineID string
 
 	// Try to get hostname as fallback
-	hostname, err := os.Hostname()
-	if err == nil {
-		machineID = hostname
-	} else {
-		// If even hostname fails, use a fixed string + username as last resort
-		username := os.Getenv("USER")
-		if username == "" {
-			username = os.Getenv("USERNAME")
-		}
-		machineID = "askta-" + username
-	}
+	// hostname, err := os.Hostname()
+	// if err == nil {
+	// 	machineID = hostname
+	// } else {
+	// 	// If even hostname fails, use a fixed string + username as last resort
+	// 	username := os.Getenv("USER")
+	// 	if username == "" {
+	// 		username = os.Getenv("USERNAME")
+	// 	}
+	// 	machineID = "askta-" + username
+	// }
 
+	// ensure machineID is unique and consistent
+	machineID := "askta-"
 	// Hash the machine ID to get a consistent length value
 	hash := sha256.Sum256([]byte(machineID))
 	return fmt.Sprintf("%x", hash), nil

@@ -72,7 +72,7 @@ func fetchAIResponse(query string, conf *config.Config) tea.Cmd {
 			Messages: []dto.Message{
 				{Role: "user"},
 			},
-			Temperature: utils.Ptr(0.0),
+			Temperature: utils.Ptr(0.7),
 			MaxTokens:   1000,
 		}
 		request.Messages[0].SetStringContent(query)
