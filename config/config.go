@@ -46,19 +46,22 @@ func LoadConfig(configPath string) (*Config, error) {
 
 		// Create a default config with comments
 		defaultConfigYaml := `# ASK Terminal AI Configuration
+# https://api.openai.com/v1/
+# https://generativelanguage.googleapis.com/v1beta/openai/
+# https://api.anthropic.com/v1/
 
 # API service configuration
 base_url: "https://api.openai.com/v1/"  # API base URL for your provider
 api_key: "your-api-key"                 # Your API key (will be encrypted after first run)
 model_name: "gpt-4o-mini"               # Default AI model to use
 
+# Model parameters(only use at conversation mode)
+temperature: 0.7                        # Temperature for chat mode (0.0-1.0, lower is more deterministic)
+max_tokens: 3000                           # Max tokens for chat mode 
+
 # Feature configuration
 private_mode: false                     # Set to true to not send directory structure
 sys_prompt: ""                          # System prompt, WARNING: Please understand what you're modifying before making changes
-
-# Model parameters
-temperature: 0.7                        # Temperature for chat mode (0.0-1.0, lower is more deterministic)
-max_tokens: 3000                           # Max tokens for chat mode 
 
 # Provider configuration (currently only openai-compatible is supported)
 provider: "openai-compatible"           # AI provider type, no other options available yet
