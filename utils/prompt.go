@@ -67,7 +67,7 @@ func buildSystemContext(conf *config.Config, mode string) string {
 	if mode == "terminal" {
 		systemPrompt = `You are a command line expert. Help the user with their terminal commands.`
 	} else {
-		systemPrompt = `You are a command line assistant helping with terminal tasks and questions.`
+		systemPrompt = `You are a helpful assist.`
 	}
 
 	// Add OS info

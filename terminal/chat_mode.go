@@ -5,6 +5,7 @@ import (
 	"ask_terminal/dto"
 	"ask_terminal/service"
 	"ask_terminal/utils"
+	"bytes"
 	"context"
 	"fmt"
 	"os"
@@ -15,6 +16,7 @@ import (
 
 	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/glamour"
 	"github.com/charmbracelet/lipgloss"
 )
 
@@ -168,20 +170,22 @@ func StartConversationMode(query string, conf *config.Config) {
 	// Print a "thinking" message
 	fmt.Println("Processing your request...")
 
-	response, err := adapter.ChatCompletion(ctx, request)
+	// Use streaming response by default
+	stream, err := adapter.ChatCompletionStream(ctx, request)
 	if err != nil {
 		fmt.Printf("Error communicating with AI: %v\n", err)
 		utils.LogError("Error communicating with AI", err)
 		os.Exit(1)
 	}
 
-	if len(response.Choices) == 0 {
-		fmt.Println("No response received from AI.")
-		os.Exit(1)
+	fmt.Println("\nResponse:")
+	for response := range stream {
+		if len(response.Choices) > 0 && response.Choices[0].Delta.Content != nil {
+			fmt.Print(*response.Choices[0].Delta.Content)
+			os.Stdout.Sync()
+		}
 	}
-
-	// Simply print the response to stdout
-	fmt.Println("\n" + response.Choices[0].Message.StringContent())
+	fmt.Println() // Add a newline at the end
 }
 
 // ChatMode handles conversations with AI
@@ -199,7 +203,8 @@ func NewChatMode(aiService *service.AIService, model string) *ChatMode {
 }
 
 // ProcessQuery sends a query to the AI service and prints the response
-func (c *ChatMode) ProcessQuery(query string, systemPrompt string, stream bool) error {
+// Stream is now true by default
+func (c *ChatMode) ProcessQuery(query string, systemPrompt string, stream ...bool) error {
 	messages := []dto.Message{
 		{
 			Role:    "system",
@@ -213,10 +218,34 @@ func (c *ChatMode) ProcessQuery(query string, systemPrompt string, stream bool) 
 
 	ctx := context.Background()
 
-	if stream {
+	// Default to streaming if not explicitly set to false
+	useStream := true
+	if len(stream) > 0 {
+		useStream = stream[0]
+	}
+
+	if useStream {
 		return c.handleStreamingResponse(ctx, messages)
 	}
 	return c.handleNonStreamingResponse(ctx, messages)
+}
+
+// renderMarkdown converts Markdown content to terminal-friendly styled text
+func renderMarkdown(markdown string) (string, error) {
+	renderer, err := glamour.NewTermRenderer(
+		// Use the default dark style
+		glamour.WithAutoStyle(),
+		// Ensure compatibility with standard terminals
+		glamour.WithWordWrap(80),
+	)
+	if err != nil {
+		return markdown, err
+	}
+	rendered, err := renderer.Render(markdown)
+	if err != nil {
+		return markdown, err
+	}
+	return rendered, nil
 }
 
 // handleNonStreamingResponse processes a non-streaming response
@@ -228,7 +257,15 @@ func (c *ChatMode) handleNonStreamingResponse(ctx context.Context, messages []dt
 
 	if len(response.Choices) > 0 {
 		content := response.Choices[0].Message.StringContent()
-		fmt.Print(content)
+
+		// Render markdown to terminal-friendly output
+		rendered, err := renderMarkdown(content)
+		if err != nil {
+			// If rendering fails, fall back to plain content
+			fmt.Print(content)
+		} else {
+			fmt.Print(rendered)
+		}
 	}
 	return nil
 }
@@ -240,13 +277,61 @@ func (c *ChatMode) handleStreamingResponse(ctx context.Context, messages []dto.M
 		return err
 	}
 
-	for response := range responseStream {
-		if len(response.Choices) > 0 && response.Choices[0].Delta.Content != nil {
-			fmt.Print(*response.Choices[0].Delta.Content)
-			// Flush stdout to ensure immediate display
-			os.Stdout.Sync()
+	// Set up a buffer for the live terminal rendering
+	var buffer bytes.Buffer
+	var renderer *glamour.TermRenderer
+
+	renderer, err = glamour.NewTermRenderer(
+		glamour.WithAutoStyle(),
+		glamour.WithWordWrap(80),
+	)
+	if err != nil {
+		// Fall back to raw output
+		for response := range responseStream {
+			if len(response.Choices) > 0 && response.Choices[0].Delta.Content != nil {
+				fmt.Print(*response.Choices[0].Delta.Content)
+				os.Stdout.Sync()
+			}
 		}
+		return nil
 	}
-	fmt.Println() // Add final newline
+
+	// Simple text indicator instead of using spinner package
+	fmt.Print("Processing")
+	indicatorDone := make(chan bool)
+
+	// Simple animation for loading indicator
+	go func() {
+		ticker := time.NewTicker(500 * time.Millisecond)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ticker.C:
+				fmt.Print(".")
+				os.Stdout.Sync()
+			case <-indicatorDone:
+				fmt.Println("\n") // Clear the loading line
+				return
+			}
+		}
+	}()
+
+	// Process the streaming response
+	go func() {
+		for response := range responseStream {
+			if len(response.Choices) > 0 && response.Choices[0].Delta.Content != nil {
+				buffer.WriteString(*response.Choices[0].Delta.Content)
+			}
+		}
+		indicatorDone <- true
+	}()
+
+	// Wait for response completion
+	<-indicatorDone
+
+	// Final render
+	rendered, _ := renderer.Render(buffer.String())
+	fmt.Print(rendered)
+
 	return nil
 }
