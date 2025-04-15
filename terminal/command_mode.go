@@ -10,7 +10,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
-	"os/exec"
 	"strings"
 	"time"
 
@@ -22,24 +21,25 @@ import (
 
 // CommandSuggestion represents a command with its description
 type CommandSuggestion struct {
-	Command     string
-	Description string
+	Command        string // The original command
+	EditedCommand  string // The edited version of the command
+	Description    string
+	CursorPosition int // Track cursor position for each command
 }
 
 // VirtualTerminalModel represents the model for the virtual terminal
 type VirtualTerminalModel struct {
-	query           string
-	input           textinput.Model
-	suggestions     []CommandSuggestion
-	selected        int
-	editMode        bool
-	loading         bool
-	err             error
-	config          *config.Config
-	logger          *utils.Logger
-	adapter         relay.AIAdapter
-	// executionMode   bool
-	// executionOutput string
+	query         string
+	input         textinput.Model
+	suggestions   []CommandSuggestion
+	selected      int
+	loading       bool
+	cursorVisible bool
+	queryMode     bool // true when entering a query, false when editing commands
+	err           error
+	config        *config.Config
+	logger        *utils.Logger
+	adapter       relay.AIAdapter
 }
 
 // NewVirtualTerminalModel creates a new virtual terminal model
@@ -58,106 +58,150 @@ func NewVirtualTerminalModel(conf *config.Config) *VirtualTerminalModel {
 	adapter, err := relay.NewAdapter(conf)
 	if err != nil {
 		return &VirtualTerminalModel{
-			input:  ti,
-			err:    err,
-			config: conf,
-			logger: logger,
+			input:     ti,
+			err:       err,
+			config:    conf,
+			logger:    logger,
+			queryMode: true,
 		}
 	}
 
 	return &VirtualTerminalModel{
-		input:   ti,
-		config:  conf,
-		logger:  logger,
-		adapter: adapter,
+		input:         ti,
+		config:        conf,
+		logger:        logger,
+		adapter:       adapter,
+		queryMode:     true,
+		cursorVisible: true,
 	}
 }
 
 // Init initializes the model
 func (m VirtualTerminalModel) Init() tea.Cmd {
-	return textinput.Blink
+	return tea.Batch(
+		textinput.Blink,
+		blinkCursor(),
+	)
 }
 
-// Update function with fixes for selection, edit mode, and keyboard input
+// Update function with DEL key support
 func (m VirtualTerminalModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	var cmd tea.Cmd
 
 	switch msg := msg.(type) {
 	case tea.KeyMsg:
-		// Handle special keys first before passing to textinput
+		// Handle special keys first
 		switch msg.String() {
 		case "ctrl+c", "q":
 			return m, tea.Quit
 
 		case "up", "down":
-			if !m.loading && len(m.suggestions) > 0 {
+			if !m.loading && len(m.suggestions) > 0 && !m.queryMode {
+				// Navigate between commands
 				if msg.String() == "up" {
 					m.selected = (m.selected - 1 + len(m.suggestions)) % len(m.suggestions)
 				} else {
 					m.selected = (m.selected + 1) % len(m.suggestions)
 				}
-
-				// Update the input field to show the currently selected command
-				// This helps with both visual feedback and editing
-				if !m.editMode {
-					m.input.SetValue(m.suggestions[m.selected].Command)
-					m.input.CursorEnd()
-				}
-				return m, nil
-			}
-
-		case "e":
-			if !m.loading && len(m.suggestions) > 0 && !m.editMode {
-				// Enter edit mode for the selected command
-				m.editMode = true
-				m.input.SetValue(m.suggestions[m.selected].Command)
-				m.input.Focus() // Make sure input is focused
-				m.input.CursorEnd()
 				return m, nil
 			}
 
 		case "enter":
-			if m.editMode {
-				// Get the edited command
-				command := m.input.Value()
-
-				// Exit edit mode and execute command immediately
-				return m, tea.Sequence(
-					executeCommandAndPrint(command),
-					tea.Quit,
-				)
-			} else if len(m.suggestions) > 0 {
-				// Execute the selected command and quit
-				command := m.suggestions[m.selected].Command
-				return m, tea.Sequence(
-					executeCommandAndPrint(command),
-					tea.Quit,
-				)
-			} else if !m.loading {
-				// Submit the query to get suggestions
-				m.query = m.input.Value()
-				if m.query != "" {
-					m.loading = true
-					// Keep the query visible while loading
-					m.input.SetValue("")
-					return m, getCommandSuggestions(m.query, m.config, m.adapter)
+			if !m.loading {
+				if len(m.suggestions) > 0 && !m.queryMode {
+					// Return the selected (possibly edited) command
+					command := m.suggestions[m.selected].EditedCommand
+					return m, tea.Sequence(
+						returnCommandToShell(command),
+						tea.Quit,
+					)
+				} else if m.queryMode {
+					// Submit the query to get suggestions
+					m.query = m.input.Value()
+					if m.query != "" {
+						m.loading = true
+						m.input.SetValue("")
+						m.queryMode = false
+						return m, getCommandSuggestions(m.query, m.config, m.adapter)
+					}
 				}
+			}
+
+		case "backspace":
+			if !m.loading && len(m.suggestions) > 0 && !m.queryMode {
+				// Handle backspace for direct command editing
+				cmd := &m.suggestions[m.selected]
+				if cmd.CursorPosition > 0 {
+					// Delete the character before the cursor
+					before := cmd.EditedCommand[:cmd.CursorPosition-1]
+					after := cmd.EditedCommand[cmd.CursorPosition:]
+					cmd.EditedCommand = before + after
+					cmd.CursorPosition--
+				}
+				return m, nil
+			}
+
+		case "delete": // Add DEL key support
+			if !m.loading && len(m.suggestions) > 0 && !m.queryMode {
+				cmd := &m.suggestions[m.selected]
+				if cmd.CursorPosition < len(cmd.EditedCommand) {
+					// Delete the character at the cursor position
+					before := cmd.EditedCommand[:cmd.CursorPosition]
+					after := cmd.EditedCommand[cmd.CursorPosition+1:]
+					cmd.EditedCommand = before + after
+				}
+				return m, nil
+			}
+
+		case "left":
+			if !m.loading && len(m.suggestions) > 0 && !m.queryMode {
+				// Move cursor left in the command
+				cmd := &m.suggestions[m.selected]
+				if cmd.CursorPosition > 0 {
+					cmd.CursorPosition--
+				}
+				return m, nil
+			}
+
+		case "right":
+			if !m.loading && len(m.suggestions) > 0 && !m.queryMode {
+				// Move cursor right in the command
+				cmd := &m.suggestions[m.selected]
+				if cmd.CursorPosition < len(cmd.EditedCommand) {
+					cmd.CursorPosition++
+				}
+				return m, nil
+			}
+
+		case "esc":
+			// Switch back to query mode if editing commands
+			if !m.loading && len(m.suggestions) > 0 && !m.queryMode {
+				// Reset edited commands to originals
+				for i := range m.suggestions {
+					m.suggestions[i].EditedCommand = m.suggestions[i].Command
+					m.suggestions[i].CursorPosition = len(m.suggestions[i].Command)
+				}
+				m.queryMode = true
+				m.input.Focus()
+				return m, nil
+			}
+
+		default:
+			// Handle regular key inputs for command editing
+			if !m.loading && len(m.suggestions) > 0 && !m.queryMode && msg.Type == tea.KeyRunes {
+				cmd := &m.suggestions[m.selected]
+				// Insert the character at cursor position
+				before := cmd.EditedCommand[:cmd.CursorPosition]
+				after := cmd.EditedCommand[cmd.CursorPosition:]
+				cmd.EditedCommand = before + string(msg.Runes) + after
+				cmd.CursorPosition += len(msg.Runes)
+				return m, nil
 			}
 		}
 
-		// Only handle other keys if not in loading state
-		if !m.loading {
-			if m.editMode {
-				m.input, cmd = m.input.Update(msg)
-			} else {
-				// When suggestions are shown but not in edit mode,
-				// typing should start a new query
-				if msg.Type == tea.KeyRunes {
-					// Clear existing suggestions for a new query
-					m.suggestions = nil
-					m.input, cmd = m.input.Update(msg)
-				}
-			}
+		// Pass inputs to textinput when in query mode
+		if m.queryMode {
+			m.input, cmd = m.input.Update(msg)
 			return m, cmd
 		}
 
@@ -166,22 +210,51 @@ func (m VirtualTerminalModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.loading = false
 		if msg.err != nil {
 			m.err = msg.err
+			m.queryMode = true // Go back to query mode on error
 			return m, nil
 		}
-		m.suggestions = msg.suggestions
-		if len(m.suggestions) > 0 {
-			m.selected = 0
-			// Update the input field with the first selected command
-			m.input.SetValue(m.suggestions[0].Command)
-			m.input.Blur() // Temporarily blur to show we're in selection mode
+
+		// Initialize suggestions with both original and edited commands
+		m.suggestions = make([]CommandSuggestion, len(msg.suggestions))
+		for i, sugg := range msg.suggestions {
+			m.suggestions[i] = CommandSuggestion{
+				Command:        sugg.Command,
+				EditedCommand:  sugg.Command,
+				Description:    sugg.Description,
+				CursorPosition: len(sugg.Command), // Start cursor at end
+			}
 		}
+
+		m.selected = 0
+		m.queryMode = false
 		return m, nil
+
+	case cursorBlinkMsg:
+		m.cursorVisible = !m.cursorVisible
+		return m, blinkCursor()
 	}
 
 	return m, nil
 }
 
-// View function with improved selection highlighting
+// Cursor blinking functionality
+type cursorBlinkMsg struct{}
+
+func blinkCursor() tea.Cmd {
+	return tea.Tick(500*time.Millisecond, func(time.Time) tea.Msg {
+		return cursorBlinkMsg{}
+	})
+}
+
+// Return command to shell
+func returnCommandToShell(command string) tea.Cmd {
+	return func() tea.Msg {
+		fmt.Print(command)
+		return nil
+	}
+}
+
+// View function with direct command editing
 func (m VirtualTerminalModel) View() string {
 	var s strings.Builder
 
@@ -197,42 +270,65 @@ func (m VirtualTerminalModel) View() string {
 	if m.loading {
 		s.WriteString(fmt.Sprintf("> %s\n\n", m.query))
 		s.WriteString("Loading suggestions...\n\n")
-	} else if m.editMode {
-		s.WriteString(color.YellowString("Editing command (press Enter to execute):\n"))
-		s.WriteString(fmt.Sprintf("%s\n\n", m.input.View()))
-	} else if len(m.suggestions) > 0 {
-		s.WriteString(fmt.Sprintf("> %s\n\n", m.query))
-		// Don't show input field when displaying suggestions
-	} else {
-		s.WriteString(fmt.Sprintf("> %s\n\n", m.input.View()))
+		return s.String()
 	}
 
-	// Command suggestions with improved highlighting
-	if len(m.suggestions) > 0 && !m.loading {
+	if m.queryMode {
+		if len(m.suggestions) > 0 {
+			s.WriteString(fmt.Sprintf("> %s\n\n", m.query))
+		} else {
+			s.WriteString(fmt.Sprintf("> %s\n\n", m.input.View()))
+		}
+	} else {
+		s.WriteString(fmt.Sprintf("> %s\n\n", m.query))
+	}
+
+	// Command suggestions with direct editing
+	if len(m.suggestions) > 0 {
 		for i, suggestion := range m.suggestions {
-			// Render each suggestion with more prominent highlighting
-			if i == m.selected {
-				// Use background color to make selection more obvious
+			if i == m.selected && !m.queryMode {
+				// Render currently selected command with cursor for editing
+				cmd := suggestion.EditedCommand
+				var displayCmd string
+
+				if m.cursorVisible {
+					// Insert cursor at current position
+					if suggestion.CursorPosition < len(cmd) {
+						displayCmd = cmd[:suggestion.CursorPosition] + "█" + cmd[suggestion.CursorPosition:]
+					} else {
+						displayCmd = cmd + "█"
+					}
+				} else {
+					// Show underscore when cursor is blinking off
+					if suggestion.CursorPosition < len(cmd) {
+						displayCmd = cmd[:suggestion.CursorPosition] + "_" + cmd[suggestion.CursorPosition:]
+					} else {
+						displayCmd = cmd + "_"
+					}
+				}
+
+				// Use background color for selection with editable command
 				selectedStyle := lipgloss.NewStyle().
 					Bold(true).
 					Foreground(lipgloss.Color("#000000")).
 					Background(lipgloss.Color("#00FF00")).
 					Padding(0, 1)
 
-				s.WriteString(selectedStyle.Render(fmt.Sprintf(" %d. %s ", i+1, suggestion.Command)))
+				s.WriteString(selectedStyle.Render(fmt.Sprintf(" %d. %s ", i+1, displayCmd)))
 				s.WriteString("\n")
 				s.WriteString(color.New(color.FgHiBlack).Sprintf("  %s\n", suggestion.Description))
 			} else {
-				s.WriteString(fmt.Sprintf(" %d. %s\n", i+1, suggestion.Command))
+				// Render non-selected commands normally
+				s.WriteString(fmt.Sprintf(" %d. %s\n", i+1, suggestion.EditedCommand))
 				s.WriteString(color.New(color.FgHiBlack).Sprintf("  %s\n", suggestion.Description))
 			}
 		}
 
 		// Instructions based on current state
-		if m.editMode {
-			s.WriteString("\n" + color.YellowString("Editing mode: modify command and press Enter to execute\n"))
+		if !m.queryMode {
+			s.WriteString("\n" + color.YellowString("Edit directly, use ↑/↓ to switch commands, Enter to execute, Esc to cancel, q to quit\n"))
 		} else {
-			s.WriteString("\n" + color.YellowString("Use ↑/↓ to select, e to edit, Enter to execute, q to quit\n"))
+			s.WriteString("\n" + color.YellowString("Type a new query or press Enter to select commands\n"))
 		}
 	}
 
@@ -244,11 +340,6 @@ type suggestionsMsg struct {
 	suggestions []CommandSuggestion
 	err         error
 }
-
-// type executionResultMsg struct {
-// 	output string
-// 	err    error
-// }
 
 // Function to get command suggestions from the AI
 func getCommandSuggestions(query string, conf *config.Config, adapter relay.AIAdapter) tea.Cmd {
@@ -365,54 +456,6 @@ func extractCommandsFromText(content string) []CommandSuggestion {
 	}
 
 	return suggestions
-}
-
-// // Function to execute a command
-// func executeCommand(command string) tea.Cmd {
-// 	return func() tea.Msg {
-// 		// Split the command into parts
-// 		parts := strings.Fields(command)
-// 		if len(parts) == 0 {
-// 			return executionResultMsg{"", fmt.Errorf("empty command")}
-// 		}
-
-// 		// Create the command
-// 		cmd := exec.Command(parts[0], parts[1:]...)
-// 		cmd.Env = os.Environ()
-
-// 		// Capture output
-// 		output, err := cmd.CombinedOutput()
-
-// 		return executionResultMsg{string(output), err}
-// 	}
-// }
-
-// Add this new function to execute the command and print results directly to stdout
-func executeCommandAndPrint(command string) tea.Cmd {
-	return func() tea.Msg {
-		fmt.Printf("\nExecuting: %s\n\n", command)
-
-		// Split the command into parts
-		parts := strings.Fields(command)
-		if len(parts) == 0 {
-			fmt.Println("Error: empty command")
-			return nil
-		}
-
-		// Create the command
-		cmd := exec.Command(parts[0], parts[1:]...)
-		cmd.Env = os.Environ()
-		cmd.Stdout = os.Stdout
-		cmd.Stderr = os.Stderr
-
-		// Execute the command directly with output going to terminal
-		err := cmd.Run()
-		if err != nil {
-			fmt.Printf("\nError: %v\n", err)
-		}
-
-		return nil
-	}
 }
 
 // StartVirtualTerminalMode starts the virtual terminal mode
