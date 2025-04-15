@@ -219,7 +219,7 @@ func getCommandSuggestions(query string, conf *config.Config, adapter relay.AIAd
 		// Build the request
 		request := utils.BuildPrompt(query, conf, "terminal")
 
-		// Send the request
+		// Send the request with timeout
 		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 		defer cancel()
 
@@ -229,39 +229,105 @@ func getCommandSuggestions(query string, conf *config.Config, adapter relay.AIAd
 			return suggestionsMsg{nil, fmt.Errorf("adapter does not implement required interface")}
 		}
 
-		response, err := adapterImpl.ChatCompletion(ctx, request)
-		if err != nil {
-			return suggestionsMsg{nil, err}
+		// Create a response channel and error channel
+		responseChan := make(chan *dto.OpenAITextResponse, 1)
+		errChan := make(chan error, 1)
+
+		// Execute request in goroutine to allow for timeout handling
+		go func() {
+			response, err := adapterImpl.ChatCompletion(ctx, request)
+			if err != nil {
+				errChan <- err
+				return
+			}
+			responseChan <- response
+		}()
+
+		// Wait for response or timeout
+		select {
+		case response := <-responseChan:
+			if len(response.Choices) == 0 {
+				return suggestionsMsg{nil, fmt.Errorf("no suggestions received")}
+			}
+
+			// Get the response content
+			content := response.Choices[0].Message.StringContent()
+
+			// Parse the JSON response
+			var rawSuggestions []map[string]map[string]string
+			if err := json.Unmarshal([]byte(content), &rawSuggestions); err != nil {
+				// Try to handle non-JSON formatted responses
+				// Log original content for debugging
+				utils.LogError("Failed to parse suggestions JSON", fmt.Errorf("content: %s, error: %v", content, err))
+
+				// Try to extract commands using a fallback approach
+				suggestions := extractCommandsFromText(content)
+				if len(suggestions) > 0 {
+					return suggestionsMsg{suggestions, nil}
+				}
+
+				return suggestionsMsg{nil, fmt.Errorf("failed to parse suggestions: %w", err)}
+			}
+
+			// Convert to CommandSuggestion objects
+			var suggestions []CommandSuggestion
+			for _, item := range rawSuggestions {
+				for _, cmdMap := range item {
+					for cmd, desc := range cmdMap {
+						suggestions = append(suggestions, CommandSuggestion{
+							Command:     cmd,
+							Description: desc,
+						})
+					}
+				}
+			}
+
+			// Log the successful suggestions
+			utils.LogInfo(fmt.Sprintf("Generated %d command suggestions for query: %s", len(suggestions), query))
+
+			return suggestionsMsg{suggestions, nil}
+
+		case err := <-errChan:
+			return suggestionsMsg{nil, fmt.Errorf("API error: %w", err)}
+
+		case <-time.After(35 * time.Second):
+			// Cancel the context if timeout occurs
+			cancel()
+			return suggestionsMsg{nil, fmt.Errorf("request timed out after 35 seconds")}
+		}
+	}
+}
+
+// Helper function to extract commands from non-JSON responses
+func extractCommandsFromText(content string) []CommandSuggestion {
+	var suggestions []CommandSuggestion
+	lines := strings.Split(content, "\n")
+
+	for _, line := range lines {
+		line = strings.TrimSpace(line)
+		if line == "" {
+			continue
 		}
 
-		if len(response.Choices) == 0 {
-			return suggestionsMsg{nil, fmt.Errorf("no suggestions received")}
-		}
+		// Look for patterns like "command - description" or "command: description"
+		for _, separator := range []string{" - ", ": "} {
+			if parts := strings.SplitN(line, separator, 2); len(parts) == 2 {
+				cmd := strings.TrimSpace(parts[0])
+				desc := strings.TrimSpace(parts[1])
 
-		// Get the response content
-		content := response.Choices[0].Message.StringContent()
-
-		// Parse the JSON response
-		var rawSuggestions []map[string]map[string]string
-		if err := json.Unmarshal([]byte(content), &rawSuggestions); err != nil {
-			return suggestionsMsg{nil, fmt.Errorf("failed to parse suggestions: %w", err)}
-		}
-
-		// Convert to CommandSuggestion objects
-		var suggestions []CommandSuggestion
-		for _, item := range rawSuggestions {
-			for _, cmdMap := range item {
-				for cmd, desc := range cmdMap {
+				// Skip if it doesn't look like a command
+				if len(cmd) > 0 && !strings.HasPrefix(cmd, "#") && !strings.HasPrefix(cmd, "//") {
 					suggestions = append(suggestions, CommandSuggestion{
 						Command:     cmd,
 						Description: desc,
 					})
+					break
 				}
 			}
 		}
-
-		return suggestionsMsg{suggestions, nil}
 	}
+
+	return suggestions
 }
 
 // Function to execute a command

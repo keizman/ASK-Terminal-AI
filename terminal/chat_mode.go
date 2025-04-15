@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"os"
 	"strings"
+	"time"
 
 	"ask_terminal/relay"
 
@@ -149,11 +150,38 @@ func (m ChatModel) View() string {
 
 // StartConversationMode starts conversation mode with an initial query
 func StartConversationMode(query string, conf *config.Config) {
-	p := tea.NewProgram(NewChatModel(query, conf))
-	if _, err := p.Run(); err != nil {
-		fmt.Printf("Error running conversation UI: %v\n", err)
+	// Get the appropriate adapter
+	adapter, err := relay.NewAdapter(conf)
+	if err != nil {
+		fmt.Printf("Error initializing AI adapter: %v\n", err)
+		utils.LogError("Error initializing AI adapter", err)
 		os.Exit(1)
 	}
+
+	// Build request using the utils package
+	request := utils.BuildPrompt(query, conf, "chat")
+
+	// Execute request
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel()
+
+	// Print a "thinking" message
+	fmt.Println("Processing your request...")
+
+	response, err := adapter.ChatCompletion(ctx, request)
+	if err != nil {
+		fmt.Printf("Error communicating with AI: %v\n", err)
+		utils.LogError("Error communicating with AI", err)
+		os.Exit(1)
+	}
+
+	if len(response.Choices) == 0 {
+		fmt.Println("No response received from AI.")
+		os.Exit(1)
+	}
+
+	// Simply print the response to stdout
+	fmt.Println("\n" + response.Choices[0].Message.StringContent())
 }
 
 // ChatMode handles conversations with AI
