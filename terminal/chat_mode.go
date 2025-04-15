@@ -181,7 +181,7 @@ func StartConversationMode(query string, conf *config.Config) {
 	// Initialize markdown renderer
 	renderer, err := glamour.NewTermRenderer(
 		glamour.WithAutoStyle(),
-		glamour.WithWordWrap(80),
+		glamour.WithWordWrap(100),
 	)
 	if err != nil {
 		// Fall back to plain text if renderer can't be created
