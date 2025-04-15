@@ -141,6 +141,20 @@ ask --model gpt-4 --sys-prompt "I'm using Ubuntu 22.04" "how to install Docker"
 
 ---
 
+
+## Develop
+
+### generate go mod and sum
+`go mod init ask_terminal && go mod tidy`
+
+### Build with stripping and optimization flags 
+`go build -ldflags="-s -w" -o ask.exe  main.go`
+
+
+### Use UPX to compress the binary (install UPX first)
+`upx --best ask.exe`
+(`choco install upx`)
+
 ## License
 
 [Apache 2.0](https://www.apache.org/licenses/LICENSE-2.0)
