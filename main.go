@@ -165,14 +165,27 @@ Examples:
 
 // showCommandHistory displays the command history
 func showCommandHistory() {
-	logFile := "/tmp/askta_Chistory.log"
+	// Use the Logger instance for proper cross-platform path handling
+	logger := utils.NewLogger()
 
-	data, err := os.ReadFile(logFile)
+	// Get properly formatted command history using existing method
+	items, err := logger.GetRecentCommands(1000)
 	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error retrieving command history: %v\n", err)
+		return
+	}
+
+	if len(items) == 0 {
 		fmt.Println("No command history found.")
 		return
 	}
 
-	fmt.Println("Recent Command History:")
-	fmt.Println(string(data))
+	fmt.Printf("Recent commands (showing %d entries):\n\n", len(items))
+	for i, item := range items {
+		fmt.Printf("%d. [%s] Query: %s\n", i+1, item.Timestamp, item.Query)
+		for cmd, desc := range item.Commands {
+			fmt.Printf("   - Command: %s\n     Description: %s\n", cmd, desc)
+		}
+		fmt.Println()
+	}
 }

@@ -112,3 +112,31 @@ func (l *Logger) GetRecentCommands(limit int) ([]CommandHistoryItem, error) {
 
 	return items, nil
 }
+
+// LogInfo logs an informational message
+func LogInfo(message string) {
+	logger := NewLogger()
+	_ = logger.LogApplication("[INFO] " + message)
+}
+
+// LogUserRequest logs a user request
+func LogUserRequest(query string, mode string) {
+	logger := NewLogger()
+	_ = logger.LogApplication(fmt.Sprintf("[USER REQUEST] Mode: %s, Query: %s", mode, query))
+}
+
+// LogSystemResponse logs an AI response
+func LogSystemResponse(responseLength int, success bool) {
+	logger := NewLogger()
+	status := "SUCCESS"
+	if !success {
+		status = "FAILED"
+	}
+	_ = logger.LogApplication(fmt.Sprintf("[SYSTEM RESPONSE] Status: %s, Response length: %d chars", status, responseLength))
+}
+
+// LogCommandExecution logs when a command is executed
+func LogCommandExecution(command string) {
+	logger := NewLogger()
+	_ = logger.LogApplication(fmt.Sprintf("[COMMAND EXECUTED] %s", command))
+}

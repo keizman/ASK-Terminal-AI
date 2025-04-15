@@ -5,11 +5,7 @@ import (
 	"os"
 )
 
-// LogInfo logs an informational message
-func LogInfo(message string) {
-	logger := NewLogger()
-	_ = logger.LogApplication("[INFO] " + message)
-}
+
 
 // LogError logs an error message
 func LogError(message string, err error) {

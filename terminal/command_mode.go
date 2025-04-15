@@ -302,7 +302,7 @@ func (m VirtualTerminalModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case cursorBlinkMsg:
 		m.cursorVisible = !m.cursorVisible
-		return blinkCursor()
+		return m, blinkCursor()
 
 	case executeResultMsg:
 		// Show the command result instead of quitting
@@ -338,6 +338,9 @@ func blinkCursor() tea.Cmd {
 // Execute command
 func executeCommand(command string) tea.Cmd {
 	return func() tea.Msg {
+		// Log command execution
+		utils.LogCommandExecution(command)
+
 		// Split the command into executable and arguments
 		parts := strings.Fields(command)
 		if len(parts) == 0 {
@@ -392,7 +395,13 @@ func (m VirtualTerminalModel) View() string {
 	if m.showResult && m.commandResult != "" {
 		s.WriteString(color.CyanString("Command Output:"))
 		s.WriteString(m.commandResult)
-		s.WriteString(color.YellowString("\n[Press Enter for new query or ESC to return to suggestions]\n\n"))
+
+		// Updated key styling for result view
+		keyStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#FF9900")).Bold(true)
+		enterKey := keyStyle.Render("[Enter]")
+		escKey := keyStyle.Render("[ESC]")
+		s.WriteString(color.YellowString("\nPress %s for new query or %s to return to suggestions\n\n", enterKey, escKey))
+
 		return s.String()
 	}
 
@@ -452,13 +461,28 @@ func (m VirtualTerminalModel) View() string {
 		}
 	}
 
-	// Instructions based on current state
+	// Instructions based on current state with updated key styling
+	keyStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#FF9900")).Bold(true)
+
 	if m.directCommandMode {
-		s.WriteString("\n" + color.YellowString("Type a command and press Enter to execute, [Tab] to switch modes, [q] to quit\n"))
+		enterKey := keyStyle.Render("[Enter]")
+		tabKey := keyStyle.Render("[Tab]")
+		ctrlQKey := keyStyle.Render("[Ctrl+q]")
+		s.WriteString("\n" + color.YellowString("Type a command and press %s to execute, %s to switch modes, %s to quit\n",
+			enterKey, tabKey, ctrlQKey))
 	} else if !m.queryMode {
-		s.WriteString("\n" + color.YellowString("Edit directly, use ↑/↓ to switch commands, Enter to execute, [Tab] to switch modes, [Esc] to cancel, [q] to quit\n"))
+		upDownKey := keyStyle.Render("[↑/↓]")
+		enterKey := keyStyle.Render("[Enter]")
+		tabKey := keyStyle.Render("[Tab]")
+		escKey := keyStyle.Render("[Esc]")
+		ctrlQKey := keyStyle.Render("[Ctrl+q]")
+		s.WriteString("\n" + color.YellowString("Edit directly, use %s to switch commands, %s to execute, %s to switch modes, %s to cancel, %s to quit\n",
+			upDownKey, enterKey, tabKey, escKey, ctrlQKey))
 	} else {
-		s.WriteString("\n" + color.YellowString("Type a query for command suggestions, [Tab] to switch to direct command mode, [q] to quit\n"))
+		tabKey := keyStyle.Render("[Tab]")
+		ctrlQKey := keyStyle.Render("[Ctrl+q]")
+		s.WriteString("\n" + color.YellowString("Type a query for command suggestions, %s to switch to direct command mode, %s to quit\n",
+			tabKey, ctrlQKey))
 	}
 
 	return s.String()
@@ -541,6 +565,16 @@ func getCommandSuggestions(query string, conf *config.Config, adapter relay.AIAd
 						})
 					}
 				}
+			}
+
+			// Log the suggestions for history
+			commandMap := make(map[string]string)
+			for _, sugg := range suggestions {
+				commandMap[sugg.Command] = sugg.Description
+			}
+			logger := utils.NewLogger()
+			if err := logger.LogCommand(query, commandMap); err != nil {
+				utils.LogError("Failed to log command history", err)
 			}
 
 			// Log the successful suggestions
