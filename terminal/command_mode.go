@@ -6,10 +6,12 @@ import (
 	"ask_terminal/relay"
 	"ask_terminal/service"
 	"ask_terminal/utils"
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
 	"os"
+	"os/exec"
 	"strings"
 	"time"
 
@@ -29,17 +31,20 @@ type CommandSuggestion struct {
 
 // VirtualTerminalModel represents the model for the virtual terminal
 type VirtualTerminalModel struct {
-	query         string
-	input         textinput.Model
-	suggestions   []CommandSuggestion
-	selected      int
-	loading       bool
-	cursorVisible bool
-	queryMode     bool // true when entering a query, false when editing commands
-	err           error
-	config        *config.Config
-	logger        *utils.Logger
-	adapter       relay.AIAdapter
+	query             string
+	input             textinput.Model
+	suggestions       []CommandSuggestion
+	selected          int
+	loading           bool
+	cursorVisible     bool
+	queryMode         bool // true when entering a query, false when editing commands
+	directCommandMode bool // true when directly entering commands to execute
+	err               error
+	config            *config.Config
+	logger            *utils.Logger
+	adapter           relay.AIAdapter
+	commandResult     string // stores the result of executed commands
+	showResult        bool   // whether to show command result
 }
 
 // NewVirtualTerminalModel creates a new virtual terminal model
@@ -67,12 +72,14 @@ func NewVirtualTerminalModel(conf *config.Config) *VirtualTerminalModel {
 	}
 
 	return &VirtualTerminalModel{
-		input:         ti,
-		config:        conf,
-		logger:        logger,
-		adapter:       adapter,
-		queryMode:     true,
-		cursorVisible: true,
+		input:             ti,
+		config:            conf,
+		logger:            logger,
+		adapter:           adapter,
+		queryMode:         true,
+		directCommandMode: false,
+		cursorVisible:     true,
+		showResult:        false,
 	}
 }
 
@@ -84,7 +91,7 @@ func (m VirtualTerminalModel) Init() tea.Cmd {
 	)
 }
 
-// Update function with DEL key support
+// Update function with DEL key support and mode toggling
 func (m VirtualTerminalModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	var cmd tea.Cmd
 
@@ -92,11 +99,39 @@ func (m VirtualTerminalModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.KeyMsg:
 		// Handle special keys first
 		switch msg.String() {
-		case "ctrl+c", "q":
+		case "ctrl+c", "ctrl+d", "ctrl+z", "ctrl+q":
 			return m, tea.Quit
 
+		case "tab":
+			// Toggle between modes: query -> direct command -> suggestions (if available)
+			if m.loading {
+				return m, nil
+			}
+
+			if m.queryMode {
+				m.queryMode = false
+				m.directCommandMode = true
+				m.input.Placeholder = "Enter command to execute directly..."
+				return m, nil
+			} else if m.directCommandMode {
+				m.directCommandMode = false
+				if len(m.suggestions) > 0 {
+					m.queryMode = false // Go to suggestion selection mode
+				} else {
+					m.queryMode = true // Go back to query mode if no suggestions
+				}
+				m.input.Placeholder = "Type your command query here..."
+				return m, nil
+			} else if len(m.suggestions) > 0 {
+				// From suggestion mode to query mode
+				m.queryMode = true
+				m.directCommandMode = false
+				m.input.Placeholder = "Type your command query here..."
+				return m, nil
+			}
+
 		case "up", "down":
-			if !m.loading && len(m.suggestions) > 0 && !m.queryMode {
+			if !m.loading && len(m.suggestions) > 0 && !m.queryMode && !m.directCommandMode {
 				// Navigate between commands
 				if msg.String() == "up" {
 					m.selected = (m.selected - 1 + len(m.suggestions)) % len(m.suggestions)
@@ -108,13 +143,35 @@ func (m VirtualTerminalModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		case "enter":
 			if !m.loading {
-				if len(m.suggestions) > 0 && !m.queryMode {
-					// Return the selected (possibly edited) command
+				if m.showResult {
+					// Start a new query session instead of just hiding the result
+					m.showResult = false
+					m.commandResult = ""
+					m.suggestions = nil
+					m.queryMode = true
+					m.directCommandMode = false
+					m.input.SetValue("")
+					m.input.Focus()
+					m.input.Placeholder = "Type your command query here..."
+					m.query = ""
+					return m, nil
+				} else if len(m.suggestions) > 0 && !m.queryMode && !m.directCommandMode {
+					// Execute the selected command
 					command := m.suggestions[m.selected].EditedCommand
 					return m, tea.Sequence(
-						returnCommandToShell(command),
-						tea.Quit,
+						executeCommand(command),
+						func() tea.Msg { return executeResultMsg{} },
 					)
+				} else if m.directCommandMode {
+					// Execute direct command
+					command := m.input.Value()
+					if command != "" {
+						m.input.SetValue("")
+						return m, tea.Sequence(
+							executeCommand(command),
+							func() tea.Msg { return executeResultMsg{} },
+						)
+					}
 				} else if m.queryMode {
 					// Submit the query to get suggestions
 					m.query = m.input.Value()
@@ -174,6 +231,20 @@ func (m VirtualTerminalModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 
 		case "esc":
+			// New behavior for ESC key when showing results
+			if !m.loading && m.showResult {
+				// Hide result and go back to suggestion mode without losing suggestions
+				m.showResult = false
+				m.commandResult = ""
+				if len(m.suggestions) > 0 {
+					m.queryMode = false
+					m.directCommandMode = false
+				} else {
+					m.queryMode = true
+				}
+				return m, nil
+			}
+
 			// Switch back to query mode if editing commands
 			if !m.loading && len(m.suggestions) > 0 && !m.queryMode {
 				// Reset edited commands to originals
@@ -199,8 +270,8 @@ func (m VirtualTerminalModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 		}
 
-		// Pass inputs to textinput when in query mode
-		if m.queryMode {
+		// Pass inputs to textinput when in appropriate modes
+		if m.queryMode || m.directCommandMode {
 			m.input, cmd = m.input.Update(msg)
 			return m, cmd
 		}
@@ -231,7 +302,25 @@ func (m VirtualTerminalModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case cursorBlinkMsg:
 		m.cursorVisible = !m.cursorVisible
-		return m, blinkCursor()
+		return blinkCursor()
+
+	case executeResultMsg:
+		// Show the command result instead of quitting
+		m.showResult = true
+		if m.directCommandMode {
+			// Stay in direct command mode
+			m.input.Focus()
+		} else {
+			// Go back to query mode after executing a suggestion
+			m.queryMode = true
+			m.input.Focus()
+			m.input.SetValue("")
+		}
+		return m, nil
+
+	case commandOutputMsg:
+		m.commandResult = string(msg)
+		return m, nil
 	}
 
 	return m, nil
@@ -246,11 +335,44 @@ func blinkCursor() tea.Cmd {
 	})
 }
 
-// Return command to shell
-func returnCommandToShell(command string) tea.Cmd {
+// Execute command
+func executeCommand(command string) tea.Cmd {
 	return func() tea.Msg {
-		fmt.Print(command)
-		return nil
+		// Split the command into executable and arguments
+		parts := strings.Fields(command)
+		if len(parts) == 0 {
+			return commandOutputMsg("Error: Empty command")
+		}
+
+		// Create a command with captured output
+		cmd := exec.Command(parts[0], parts[1:]...)
+
+		// Capture both stdout and stderr
+		var stdout, stderr bytes.Buffer
+		cmd.Stdout = &stdout
+		cmd.Stderr = &stderr
+
+		err := cmd.Run()
+
+		// Build the output
+		var output strings.Builder
+		output.WriteString("\n")
+
+		if stdout.Len() > 0 {
+			output.WriteString(stdout.String())
+		}
+
+		if stderr.Len() > 0 {
+			output.WriteString("\nError output:\n")
+			output.WriteString(stderr.String())
+		}
+
+		if err != nil && stderr.Len() == 0 {
+			output.WriteString(fmt.Sprintf("\nCommand error: %v", err))
+		}
+
+		output.WriteString("\n")
+		return commandOutputMsg(output.String())
 	}
 }
 
@@ -266,70 +388,77 @@ func (m VirtualTerminalModel) View() string {
 		s.WriteString(color.RedString("Error: %v\n\n", m.err))
 	}
 
-	// Input field or query display
+	// Show command result if available
+	if m.showResult && m.commandResult != "" {
+		s.WriteString(color.CyanString("Command Output:"))
+		s.WriteString(m.commandResult)
+		s.WriteString(color.YellowString("\n[Press Enter for new query or ESC to return to suggestions]\n\n"))
+		return s.String()
+	}
+
+	// Input field or query display based on mode
 	if m.loading {
 		s.WriteString(fmt.Sprintf("> %s\n\n", m.query))
 		s.WriteString("Loading suggestions...\n\n")
 		return s.String()
 	}
 
-	if m.queryMode {
+	// Display current mode
+	if m.directCommandMode {
+		s.WriteString(color.GreenString("[DIRECT COMMAND MODE] "))
+		s.WriteString(fmt.Sprintf("> %s\n\n", m.input.View()))
+	} else if m.queryMode {
+		s.WriteString(color.BlueString("[QUERY MODE] "))
 		if len(m.suggestions) > 0 {
 			s.WriteString(fmt.Sprintf("> %s\n\n", m.query))
 		} else {
 			s.WriteString(fmt.Sprintf("> %s\n\n", m.input.View()))
 		}
 	} else {
+		s.WriteString(color.MagentaString("[SUGGESTION MODE] "))
 		s.WriteString(fmt.Sprintf("> %s\n\n", m.query))
 	}
 
 	// Command suggestions with direct editing
-	if len(m.suggestions) > 0 {
+	if len(m.suggestions) > 0 && !m.directCommandMode {
 		for i, suggestion := range m.suggestions {
-			if i == m.selected && !m.queryMode {
-				// Render currently selected command with cursor for editing
-				cmd := suggestion.EditedCommand
-				var displayCmd string
+			// Highlight selected suggestion
+			prefix := "  "
+			if i == m.selected {
+				prefix = "> "
+			}
 
+			// Display command with cursor
+			commandDisplay := suggestion.EditedCommand
+			if i == m.selected {
+				// Insert cursor at the right position
 				if m.cursorVisible {
-					// Insert cursor at current position
-					if suggestion.CursorPosition < len(cmd) {
-						displayCmd = cmd[:suggestion.CursorPosition] + "█" + cmd[suggestion.CursorPosition:]
-					} else {
-						displayCmd = cmd + "█"
-					}
-				} else {
-					// Show underscore when cursor is blinking off
-					if suggestion.CursorPosition < len(cmd) {
-						displayCmd = cmd[:suggestion.CursorPosition] + "_" + cmd[suggestion.CursorPosition:]
-					} else {
-						displayCmd = cmd + "_"
+					pos := suggestion.CursorPosition
+					if pos >= 0 && pos <= len(commandDisplay) {
+						commandDisplay = commandDisplay[:pos] + "|" + commandDisplay[pos:]
 					}
 				}
 
-				// Use background color for selection with editable command
-				selectedStyle := lipgloss.NewStyle().
-					Bold(true).
-					Foreground(lipgloss.Color("#000000")).
-					Background(lipgloss.Color("#00FF00")).
-					Padding(0, 1)
-
-				s.WriteString(selectedStyle.Render(fmt.Sprintf(" %d. %s ", i+1, displayCmd)))
-				s.WriteString("\n")
-				s.WriteString(color.New(color.FgHiBlack).Sprintf("  %s\n", suggestion.Description))
+				// Highlight selected command
+				commandStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#FFFF00")).Bold(true)
+				s.WriteString(prefix + commandStyle.Render(commandDisplay) + "\n")
 			} else {
-				// Render non-selected commands normally
-				s.WriteString(fmt.Sprintf(" %d. %s\n", i+1, suggestion.EditedCommand))
-				s.WriteString(color.New(color.FgHiBlack).Sprintf("  %s\n", suggestion.Description))
+				s.WriteString(prefix + commandDisplay + "\n")
 			}
-		}
 
-		// Instructions based on current state
-		if !m.queryMode {
-			s.WriteString("\n" + color.YellowString("Edit directly, use ↑/↓ to switch commands, Enter to execute, Esc to cancel, q to quit\n"))
-		} else {
-			s.WriteString("\n" + color.YellowString("Type a new query or press Enter to select commands\n"))
+			// Display description with a different color
+			descStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#AAAAAA")).Italic(true)
+			s.WriteString("    " + descStyle.Render(suggestion.Description) + "\n\n")
 		}
+	}
+
+	// Instructions based on current state
+	if m.directCommandMode {
+		s.WriteString("\n" + color.YellowString("Type a command and press Enter to execute, [Tab] to switch modes, [q] to quit\n"))
+	} else if !m.queryMode {
+		s.WriteString("\n" + color.YellowString("Edit directly, use ↑/↓ to switch commands, Enter to execute, [Tab] to switch modes, [Esc] to cancel, [q] to quit\n"))
+	} else {
+		s.WriteString("\n" + color.YellowString("Type a query for command suggestions, [Tab] to switch to direct command mode, [q] to quit\n"))
 	}
 
 	return s.String()
@@ -340,6 +469,10 @@ type suggestionsMsg struct {
 	suggestions []CommandSuggestion
 	err         error
 }
+
+type executeResultMsg struct{}
+
+type commandOutputMsg string
 
 // Function to get command suggestions from the AI
 func getCommandSuggestions(query string, conf *config.Config, adapter relay.AIAdapter) tea.Cmd {
