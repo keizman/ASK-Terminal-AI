@@ -38,8 +38,8 @@ type VirtualTerminalModel struct {
 	config          *config.Config
 	logger          *utils.Logger
 	adapter         relay.AIAdapter
-	executionMode   bool
-	executionOutput string
+	// executionMode   bool
+	// executionOutput string
 }
 
 // NewVirtualTerminalModel creates a new virtual terminal model
@@ -78,7 +78,7 @@ func (m VirtualTerminalModel) Init() tea.Cmd {
 	return textinput.Blink
 }
 
-// Update handles the model updates
+// Update function with fixes for selection, edit mode, and keyboard input
 func (m VirtualTerminalModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	var cmd tea.Cmd
 
@@ -96,35 +96,36 @@ func (m VirtualTerminalModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				} else {
 					m.selected = (m.selected + 1) % len(m.suggestions)
 				}
+
+				// Update the input field to show the currently selected command
+				// This helps with both visual feedback and editing
+				if !m.editMode {
+					m.input.SetValue(m.suggestions[m.selected].Command)
+					m.input.CursorEnd()
+				}
+				return m, nil
 			}
-			return m, nil
 
 		case "e":
-			// Debug log to verify key press is detected
-			utils.LogInfo("Edit key pressed")
-
-			if !m.loading && len(m.suggestions) > 0 && !m.editMode && !m.executionMode {
+			if !m.loading && len(m.suggestions) > 0 && !m.editMode {
 				// Enter edit mode for the selected command
 				m.editMode = true
 				m.input.SetValue(m.suggestions[m.selected].Command)
+				m.input.Focus() // Make sure input is focused
 				m.input.CursorEnd()
 				return m, nil
 			}
 
 		case "enter":
 			if m.editMode {
-				// Exit edit mode, update the command, and execute it directly
-				m.editMode = false
+				// Get the edited command
 				command := m.input.Value()
-				// Execute command and quit
+
+				// Exit edit mode and execute command immediately
 				return m, tea.Sequence(
 					executeCommandAndPrint(command),
 					tea.Quit,
 				)
-			} else if m.executionMode {
-				// Exit execution mode
-				m.executionMode = false
-				m.executionOutput = ""
 			} else if len(m.suggestions) > 0 {
 				// Execute the selected command and quit
 				command := m.suggestions[m.selected].Command
@@ -136,17 +137,27 @@ func (m VirtualTerminalModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				// Submit the query to get suggestions
 				m.query = m.input.Value()
 				if m.query != "" {
-					m.input.SetValue("")
 					m.loading = true
+					// Keep the query visible while loading
+					m.input.SetValue("")
 					return m, getCommandSuggestions(m.query, m.config, m.adapter)
 				}
 			}
-			return m, nil
 		}
 
-		// Other key handling...
-		if !m.executionMode {
-			m.input, cmd = m.input.Update(msg)
+		// Only handle other keys if not in loading state
+		if !m.loading {
+			if m.editMode {
+				m.input, cmd = m.input.Update(msg)
+			} else {
+				// When suggestions are shown but not in edit mode,
+				// typing should start a new query
+				if msg.Type == tea.KeyRunes {
+					// Clear existing suggestions for a new query
+					m.suggestions = nil
+					m.input, cmd = m.input.Update(msg)
+				}
+			}
 			return m, cmd
 		}
 
@@ -159,14 +170,10 @@ func (m VirtualTerminalModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		m.suggestions = msg.suggestions
 		if len(m.suggestions) > 0 {
-			m.selected = 0 // Select the first suggestion
-		}
-		return m, nil
-
-	case executionResultMsg:
-		m.executionOutput = msg.output
-		if msg.err != nil {
-			m.executionOutput += "\nError: " + msg.err.Error()
+			m.selected = 0
+			// Update the input field with the first selected command
+			m.input.SetValue(m.suggestions[0].Command)
+			m.input.Blur() // Temporarily blur to show we're in selection mode
 		}
 		return m, nil
 	}
@@ -174,7 +181,7 @@ func (m VirtualTerminalModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-// View renders the UI
+// View function with improved selection highlighting
 func (m VirtualTerminalModel) View() string {
 	var s strings.Builder
 
@@ -186,40 +193,47 @@ func (m VirtualTerminalModel) View() string {
 		s.WriteString(color.RedString("Error: %v\n\n", m.err))
 	}
 
-	if m.executionMode {
-		// Show command execution results
-		s.WriteString(color.CyanString("Executing: %s\n\n", m.suggestions[m.selected].Command))
-		s.WriteString(m.executionOutput + "\n\n")
-		s.WriteString(color.YellowString("Press Enter to continue...\n"))
-		return s.String()
-	}
-
 	// Input field or query display
 	if m.loading {
 		s.WriteString(fmt.Sprintf("> %s\n\n", m.query))
 		s.WriteString("Loading suggestions...\n\n")
 	} else if m.editMode {
-		s.WriteString(color.YellowString("Editing command (press Enter when done):\n"))
+		s.WriteString(color.YellowString("Editing command (press Enter to execute):\n"))
 		s.WriteString(fmt.Sprintf("%s\n\n", m.input.View()))
+	} else if len(m.suggestions) > 0 {
+		s.WriteString(fmt.Sprintf("> %s\n\n", m.query))
+		// Don't show input field when displaying suggestions
 	} else {
 		s.WriteString(fmt.Sprintf("> %s\n\n", m.input.View()))
 	}
 
-	// Command suggestions
+	// Command suggestions with improved highlighting
 	if len(m.suggestions) > 0 && !m.loading {
 		for i, suggestion := range m.suggestions {
-			// Render each suggestion
+			// Render each suggestion with more prominent highlighting
 			if i == m.selected {
-				s.WriteString(color.GreenString("→ %d. %s\n", i+1, suggestion.Command))
+				// Use background color to make selection more obvious
+				selectedStyle := lipgloss.NewStyle().
+					Bold(true).
+					Foreground(lipgloss.Color("#000000")).
+					Background(lipgloss.Color("#00FF00")).
+					Padding(0, 1)
+
+				s.WriteString(selectedStyle.Render(fmt.Sprintf(" %d. %s ", i+1, suggestion.Command)))
+				s.WriteString("\n")
 				s.WriteString(color.New(color.FgHiBlack).Sprintf("  %s\n", suggestion.Description))
 			} else {
-				s.WriteString(fmt.Sprintf("%d. %s\n", i+1, suggestion.Command))
+				s.WriteString(fmt.Sprintf(" %d. %s\n", i+1, suggestion.Command))
 				s.WriteString(color.New(color.FgHiBlack).Sprintf("  %s\n", suggestion.Description))
 			}
 		}
 
-		// Instructions
-		s.WriteString("\n" + color.YellowString("Use ↑/↓ to navigate, e to edit, Enter to execute, q to quit\n"))
+		// Instructions based on current state
+		if m.editMode {
+			s.WriteString("\n" + color.YellowString("Editing mode: modify command and press Enter to execute\n"))
+		} else {
+			s.WriteString("\n" + color.YellowString("Use ↑/↓ to select, e to edit, Enter to execute, q to quit\n"))
+		}
 	}
 
 	return s.String()
@@ -231,10 +245,10 @@ type suggestionsMsg struct {
 	err         error
 }
 
-type executionResultMsg struct {
-	output string
-	err    error
-}
+// type executionResultMsg struct {
+// 	output string
+// 	err    error
+// }
 
 // Function to get command suggestions from the AI
 func getCommandSuggestions(query string, conf *config.Config, adapter relay.AIAdapter) tea.Cmd {
@@ -353,25 +367,25 @@ func extractCommandsFromText(content string) []CommandSuggestion {
 	return suggestions
 }
 
-// Function to execute a command
-func executeCommand(command string) tea.Cmd {
-	return func() tea.Msg {
-		// Split the command into parts
-		parts := strings.Fields(command)
-		if len(parts) == 0 {
-			return executionResultMsg{"", fmt.Errorf("empty command")}
-		}
+// // Function to execute a command
+// func executeCommand(command string) tea.Cmd {
+// 	return func() tea.Msg {
+// 		// Split the command into parts
+// 		parts := strings.Fields(command)
+// 		if len(parts) == 0 {
+// 			return executionResultMsg{"", fmt.Errorf("empty command")}
+// 		}
 
-		// Create the command
-		cmd := exec.Command(parts[0], parts[1:]...)
-		cmd.Env = os.Environ()
+// 		// Create the command
+// 		cmd := exec.Command(parts[0], parts[1:]...)
+// 		cmd.Env = os.Environ()
 
-		// Capture output
-		output, err := cmd.CombinedOutput()
+// 		// Capture output
+// 		output, err := cmd.CombinedOutput()
 
-		return executionResultMsg{string(output), err}
-	}
-}
+// 		return executionResultMsg{string(output), err}
+// 	}
+// }
 
 // Add this new function to execute the command and print results directly to stdout
 func executeCommandAndPrint(command string) tea.Cmd {
