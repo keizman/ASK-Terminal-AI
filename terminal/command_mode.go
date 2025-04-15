@@ -144,6 +144,26 @@ func (m VirtualTerminalModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.input, cmd = m.input.Update(msg)
 			return m, cmd
 		}
+
+	case suggestionsMsg:
+		// Set loading to false when suggestions are received
+		m.loading = false
+		if msg.err != nil {
+			m.err = msg.err
+			return m, nil
+		}
+		m.suggestions = msg.suggestions
+		if len(m.suggestions) > 0 {
+			m.selected = 0 // Select the first suggestion
+		}
+		return m, nil
+
+	case executionResultMsg:
+		m.executionOutput = msg.output
+		if msg.err != nil {
+			m.executionOutput += "\nError: " + msg.err.Error()
+		}
+		return m, nil
 	}
 
 	// The rest of your existing case handling...
