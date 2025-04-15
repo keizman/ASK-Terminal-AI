@@ -178,14 +178,44 @@ func StartConversationMode(query string, conf *config.Config) {
 		os.Exit(1)
 	}
 
+	// Initialize markdown renderer
+	renderer, err := glamour.NewTermRenderer(
+		glamour.WithAutoStyle(),
+		glamour.WithWordWrap(80),
+	)
+	if err != nil {
+		// Fall back to plain text if renderer can't be created
+		fmt.Println("\nResponse:")
+		for response := range stream {
+			if len(response.Choices) > 0 && response.Choices[0].Delta.Content != nil {
+				fmt.Print(*response.Choices[0].Delta.Content)
+				os.Stdout.Sync()
+			}
+		}
+		fmt.Println()
+		return
+	}
+
+	// Create buffer to collect content
+	var buffer bytes.Buffer
+
+	// Process response
 	fmt.Println("\nResponse:")
+
+	// Simple streaming output instead of trying to clear the screen
 	for response := range stream {
 		if len(response.Choices) > 0 && response.Choices[0].Delta.Content != nil {
-			fmt.Print(*response.Choices[0].Delta.Content)
+			content := *response.Choices[0].Delta.Content
+			buffer.WriteString(content)
+			fmt.Print(content)
 			os.Stdout.Sync()
 		}
 	}
-	fmt.Println() // Add a newline at the end
+
+	// Final render with markdown formatting
+	fmt.Println("\n\n--- Formatted Response ---")
+	rendered, _ := renderer.Render(buffer.String())
+	fmt.Println(rendered)
 }
 
 // ChatMode handles conversations with AI
@@ -277,61 +307,27 @@ func (c *ChatMode) handleStreamingResponse(ctx context.Context, messages []dto.M
 		return err
 	}
 
-	// Set up a buffer for the live terminal rendering
+	// Set up a buffer for the final rendering
 	var buffer bytes.Buffer
-	var renderer *glamour.TermRenderer
 
-	renderer, err = glamour.NewTermRenderer(
-		glamour.WithAutoStyle(),
-		glamour.WithWordWrap(80),
-	)
-	if err != nil {
-		// Fall back to raw output
-		for response := range responseStream {
-			if len(response.Choices) > 0 && response.Choices[0].Delta.Content != nil {
-				fmt.Print(*response.Choices[0].Delta.Content)
-				os.Stdout.Sync()
-			}
+	// Print indicator
+	fmt.Println("Processing your request...")
+	fmt.Println("\nResponse:")
+
+	// Process the streaming response - simple streaming output
+	for response := range responseStream {
+		if len(response.Choices) > 0 && response.Choices[0].Delta.Content != nil {
+			content := *response.Choices[0].Delta.Content
+			buffer.WriteString(content)
+			fmt.Print(content)
+			os.Stdout.Sync()
 		}
-		return nil
 	}
 
-	// Simple text indicator instead of using spinner package
-	fmt.Print("Processing")
-	indicatorDone := make(chan bool)
-
-	// Simple animation for loading indicator
-	go func() {
-		ticker := time.NewTicker(500 * time.Millisecond)
-		defer ticker.Stop()
-		for {
-			select {
-			case <-ticker.C:
-				fmt.Print(".")
-				os.Stdout.Sync()
-			case <-indicatorDone:
-				fmt.Println("\n") // Clear the loading line
-				return
-			}
-		}
-	}()
-
-	// Process the streaming response
-	go func() {
-		for response := range responseStream {
-			if len(response.Choices) > 0 && response.Choices[0].Delta.Content != nil {
-				buffer.WriteString(*response.Choices[0].Delta.Content)
-			}
-		}
-		indicatorDone <- true
-	}()
-
-	// Wait for response completion
-	<-indicatorDone
-
-	// Final render
-	rendered, _ := renderer.Render(buffer.String())
-	fmt.Print(rendered)
+	// Final render with markdown formatting
+	fmt.Println("\n\n--- Formatted Response ---")
+	rendered, _ := renderMarkdown(buffer.String())
+	fmt.Println(rendered)
 
 	return nil
 }
