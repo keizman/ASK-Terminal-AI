@@ -199,8 +199,10 @@ func (m VirtualTerminalModel) View() string {
 		s.WriteString(fmt.Sprintf("> %s\n\n", m.query))
 		s.WriteString("Loading suggestions...\n\n")
 	} else if m.editMode {
-		s.WriteString(color.YellowString("Editing command (press Enter when done):\n"))
-		s.WriteString(fmt.Sprintf("%s\n\n", m.input.View()))
+		// Enhanced edit mode display
+		s.WriteString(color.YellowString("Editing command #%d (press Enter when done):\n", m.selected+1))
+		s.WriteString(color.CyanString("Original: %s\n", m.suggestions[m.selected].Command))
+		s.WriteString(color.GreenString("Modified: %s\n\n", m.input.View()))
 	} else {
 		s.WriteString(fmt.Sprintf("> %s\n\n", m.input.View()))
 	}
@@ -208,9 +210,9 @@ func (m VirtualTerminalModel) View() string {
 	// Command suggestions
 	if len(m.suggestions) > 0 && !m.loading {
 		for i, suggestion := range m.suggestions {
-			// Render each suggestion
+			// Render each suggestion with enhanced visual indication
 			if i == m.selected {
-				s.WriteString(color.GreenString("→ %d. %s\n", i+1, suggestion.Command))
+				s.WriteString(color.GreenString("→ %d. ", i+1) + color.HiWhiteString("%s\n", suggestion.Command))
 				s.WriteString(color.New(color.FgHiBlack).Sprintf("  %s\n", suggestion.Description))
 			} else {
 				s.WriteString(fmt.Sprintf("%d. %s\n", i+1, suggestion.Command))
@@ -218,8 +220,12 @@ func (m VirtualTerminalModel) View() string {
 			}
 		}
 
-		// Instructions
-		s.WriteString("\n" + color.YellowString("Use ↑/↓ to navigate, e to edit, Enter to execute, q to quit\n"))
+		// Enhanced instructions
+		if m.editMode {
+			s.WriteString("\n" + color.YellowString("Edit the command and press Enter to execute\n"))
+		} else {
+			s.WriteString("\n" + color.YellowString("Use ↑/↓ to navigate, e to edit selected command, Enter to execute, q to quit\n"))
+		}
 	}
 
 	return s.String()
