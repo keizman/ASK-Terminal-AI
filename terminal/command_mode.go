@@ -113,19 +113,25 @@ func (m VirtualTerminalModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		case "enter":
 			if m.editMode {
-				// Exit edit mode and update the command
+				// Exit edit mode, update the command, and execute it directly
 				m.editMode = false
-				m.suggestions[m.selected].Command = m.input.Value()
-				m.input.SetValue("")
+				command := m.input.Value()
+				// Execute command and quit
+				return m, tea.Sequence(
+					executeCommandAndPrint(command),
+					tea.Quit,
+				)
 			} else if m.executionMode {
 				// Exit execution mode
 				m.executionMode = false
 				m.executionOutput = ""
 			} else if len(m.suggestions) > 0 {
-				// Execute the selected command
+				// Execute the selected command and quit
 				command := m.suggestions[m.selected].Command
-				m.executionMode = true
-				return m, executeCommand(command)
+				return m, tea.Sequence(
+					executeCommandAndPrint(command),
+					tea.Quit,
+				)
 			} else if !m.loading {
 				// Submit the query to get suggestions
 				m.query = m.input.Value()
@@ -138,8 +144,7 @@ func (m VirtualTerminalModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 
-		// Only pass keyboard input to the textinput when not in execution mode
-		// and not handling special keys for navigation
+		// Other key handling...
 		if !m.executionMode {
 			m.input, cmd = m.input.Update(msg)
 			return m, cmd
@@ -165,8 +170,6 @@ func (m VirtualTerminalModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 	}
-
-	// The rest of your existing case handling...
 
 	return m, nil
 }
@@ -367,6 +370,34 @@ func executeCommand(command string) tea.Cmd {
 		output, err := cmd.CombinedOutput()
 
 		return executionResultMsg{string(output), err}
+	}
+}
+
+// Add this new function to execute the command and print results directly to stdout
+func executeCommandAndPrint(command string) tea.Cmd {
+	return func() tea.Msg {
+		fmt.Printf("\nExecuting: %s\n\n", command)
+
+		// Split the command into parts
+		parts := strings.Fields(command)
+		if len(parts) == 0 {
+			fmt.Println("Error: empty command")
+			return nil
+		}
+
+		// Create the command
+		cmd := exec.Command(parts[0], parts[1:]...)
+		cmd.Env = os.Environ()
+		cmd.Stdout = os.Stdout
+		cmd.Stderr = os.Stderr
+
+		// Execute the command directly with output going to terminal
+		err := cmd.Run()
+		if err != nil {
+			fmt.Printf("\nError: %v\n", err)
+		}
+
+		return nil
 	}
 }
 
