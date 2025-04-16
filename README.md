@@ -194,7 +194,7 @@ ask --model gpt-4 --sys-prompt "I'm using Ubuntu 22.04" "how to install Docker"
 ## Future Plans
 - Support multi-turn conversations
 - Support (i18n) 
-
+- Support proxy
 
 ## License
 
