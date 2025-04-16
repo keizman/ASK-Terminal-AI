@@ -8,7 +8,7 @@ ASK Terminal AI is a command-line tool that allows users to quickly get and exec
 ## Quickly download
 1.**Download file**
 ```bash
-wget -O ask "https://github.com/keizman/ASK-Terminal-AI/releases/download/main/ask_linux" 
+wget -O ask "https://github.com/keizman/Ask-Terminal-AI/releases/download/main/ask_linux" 
 ```
 2.**Generate config.yaml and edit**
 `If u have not config.yaml at conf dir, it will auto generate and hint you file location`
@@ -23,42 +23,42 @@ vim /root/.config/askta/config.yaml
 3.**start to use**
 
 
-### quickly transfer
+### Quickly transfer
 1.**Copy from another machine**
 ```bash
 scp -r root@{ip}:/root/.config/askta /root/.config/
 ```
 
-2. **Make the binary executable:**
+2.**Make the binary executable:**
    ```bash
    chmod +x ask
    ```
 
-3. **Optionally install to the system path:**
-   ```bash
+3.**Optionally install to the system path:**
+```bash
    sudo mv ask /usr/local/bin/ask
-
+```
 
 ## Building from Source
 
-1. **Clone the repository:**
+1.**Clone the repository:**
    ```bash
-   git clone https://github.com/keizman/ASK-Terminal-AI.git
+   git clone https://github.com/keizman/Ask-Terminal-AI.git
    # Or if you already have the code:
-   cd ASK-Terminal-AI
+   cd Ask-Terminal-AI
    ```
 
-2. **Build the binary:**
+2.**Build the binary:**
    ```bash
    go build -o ask main.go
    ```
 
-3. **Make the binary executable:**
+3.**Make the binary executable:**
    ```bash
    chmod +x ask
    ```
 
-4. **Optionally install to the system path:**
+4.**Optionally install to the system path:**
    ```bash
    sudo mv ask /usr/local/bin/ask
    ```
