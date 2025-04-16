@@ -11,14 +11,19 @@ Ask Terminal AI is a command-line tool that allows users to quickly get and exec
 wget -O ask "https://github.com/keizman/Ask-Terminal-AI/releases/download/main/ask_linux" 
 ```
 2. **Generate config.yaml and edit**
+
 `If u have not config.yaml at conf dir, it will auto generate and hint you file location`
+
 ```bash
 ask 
 ```
+
 `Modify model and apikey`
+
 ```bash
 vim /root/.config/askta/config.yaml 
 ```
+
 
 3. **start to use**
 
@@ -185,6 +190,10 @@ ask --model gpt-4 --sys-prompt "I'm using Ubuntu 22.04" "how to install Docker"
 `upx --best ask.exe`
 (`choco install upx`)
 
+
+## Future Plans
+- Support multi-turn conversations
+- Support (i18n) 
 
 
 ## License
