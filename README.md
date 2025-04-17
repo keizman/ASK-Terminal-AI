@@ -134,6 +134,12 @@ Before using Ask Terminal AI, you need to create a configuration file.
   ```bash
   ask -i "explain the difference between grep and awk"
   ```
+- Or input file content
+
+```bash
+echo "Do you see spelling errors in the following text?"; cat script.sh | ask -i 
+
+```
 
 ---
 

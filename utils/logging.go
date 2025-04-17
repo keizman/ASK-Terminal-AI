@@ -126,13 +126,20 @@ func LogUserRequest(query string, mode string) {
 }
 
 // LogSystemResponse logs an AI response
-func LogSystemResponse(responseLength int, success bool) {
+func LogSystemResponse(responseLength int, success bool, response string) {
 	logger := NewLogger()
 	status := "SUCCESS"
 	if !success {
 		status = "FAILED"
 	}
 	_ = logger.LogApplication(fmt.Sprintf("[SYSTEM RESPONSE] Status: %s, Response length: %d chars", status, responseLength))
+
+	// Log the actual response content (might want to truncate very long responses)
+	if len(response) > 5000 {
+		_ = logger.LogApplication(fmt.Sprintf("[RESPONSE CONTENT] %s...(truncated)", response[:5000]))
+	} else {
+		_ = logger.LogApplication(fmt.Sprintf("[RESPONSE CONTENT] %s", response))
+	}
 }
 
 // LogCommandExecution logs when a command is executed

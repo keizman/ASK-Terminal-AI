@@ -112,8 +112,10 @@ func (m ChatModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if msg.err != nil {
 			m.err = msg.err
 			m.content = fmt.Sprintf("Error: %v", msg.err)
+			utils.LogSystemResponse(0, false, m.content)
 		} else {
 			m.content = msg.content
+			utils.LogSystemResponse(len(m.content), true, m.content)
 		}
 
 		// Set content in viewport for scrolling
@@ -152,6 +154,7 @@ func (m ChatModel) View() string {
 
 // StartConversationMode starts conversation mode with an initial query
 func StartConversationMode(query string, conf *config.Config) {
+	utils.LogInfo(fmt.Sprintf("Starting Chat Mode with query: %s", query))
 	// Get the appropriate adapter
 	adapter, err := relay.NewAdapter(conf)
 	if err != nil {
@@ -216,6 +219,7 @@ func StartConversationMode(query string, conf *config.Config) {
 	fmt.Println("\n\n--- Formatted Response ---")
 	rendered, _ := renderer.Render(buffer.String())
 	fmt.Println(rendered)
+	utils.LogInfo(fmt.Sprintf("End of Chat Mode with answer: %s", rendered))
 }
 
 // ChatMode handles conversations with AI

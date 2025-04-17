@@ -3,6 +3,7 @@ package cmd
 
 import (
 	"fmt"
+	"io"
 	"os"
 	"strings"
 
@@ -24,7 +25,8 @@ var (
 	maxTokens   uint
 	privateMode bool
 	showHistory bool
-	proxyURL    string // Add this line
+	proxyURL    string
+	interactive bool // Add this for interactive mode
 )
 
 var rootCmd = &cobra.Command{
@@ -83,11 +85,34 @@ var rootCmd = &cobra.Command{
 			conf.Proxy = proxyURL
 		}
 
-		// Check if a query is provided
-		if len(args) > 0 {
-			// Join all args to form the query
-			query := strings.Join(args, " ")
-			// Conversation mode
+		// Check if stdin has data (is being piped)
+		stdinInfo, _ := os.Stdin.Stat()
+		isPipe := (stdinInfo.Mode() & os.ModeCharDevice) == 0
+
+		var query string
+		if isPipe {
+			// Read from stdin
+			stdinData, err := io.ReadAll(os.Stdin)
+			if err != nil {
+				logger.LogApplication(fmt.Sprintf("Error reading stdin: %v", err))
+				fmt.Fprintf(os.Stderr, "Error reading stdin: %v\n", err)
+				os.Exit(1)
+			}
+
+			// If args are provided, use them as the query and the stdin data as context
+			if len(args) > 0 {
+				query = strings.Join(args, " ") + "\n\nContent:\n" + string(stdinData)
+			} else {
+				// If no args, just use the stdin data as query
+				query = string(stdinData)
+			}
+
+			// Start conversation mode with piped data
+			terminal.StartConversationMode(query, conf)
+		} else if len(args) > 0 || interactive {
+			// Join all args to form the query if any
+			query = strings.Join(args, " ")
+			// Conversation mode (with args or interactive flag)
 			terminal.StartConversationMode(query, conf)
 		} else {
 			// Virtual terminal mode
@@ -115,6 +140,9 @@ func init() {
 
 	// Add proxyURL flag
 	rootCmd.PersistentFlags().StringVarP(&proxyURL, "proxy", "x", "", "Proxy URL (e.g., http://user:pass@host:port)")
+
+	// Add interactive mode flag
+	rootCmd.PersistentFlags().BoolVarP(&interactive, "interactive", "i", false, "Use interactive conversation mode")
 }
 
 func Execute() {

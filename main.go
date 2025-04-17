@@ -128,7 +128,7 @@ func main() {
 	}
 
 	// Log application start
-	utils.LogInfo("ASK Terminal AI started")
+	// utils.LogInfo("ASK Terminal AI started")
 
 	// Process query based on mode
 	if *interactiveMode {
@@ -137,7 +137,7 @@ func main() {
 		terminal.StartCommandMode(query, conf)
 	}
 
-	utils.LogInfo("ASK Terminal AI completed")
+	// utils.LogInfo("ASK Terminal AI completed")
 }
 
 // showHelpMessage prints the help message
