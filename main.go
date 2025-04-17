@@ -22,6 +22,7 @@ func main() {
 	baseURL := flag.String("u", "", "API base URL")
 	apiKey := flag.String("k", "", "API key")
 	sysPrompt := flag.String("s", "", "System prompt")
+	proxyURL := flag.String("x", "", "Proxy URL (e.g., http://user:pass@host:port)")
 
 	// Define temperature and maxTokens flags
 	var temperatureFlag float64
@@ -97,6 +98,9 @@ func main() {
 	if *sysPrompt != "" {
 		args["sys_prompt"] = *sysPrompt
 	}
+	if *proxyURL != "" {
+		args["proxy"] = *proxyURL
+	}
 
 	// Only include temperature if it was explicitly provided
 	if temperatureProvided {
@@ -156,6 +160,7 @@ Options:
   -h, --help              Show this help message
   -show                   Show command history
   -i                      Use interactive conversation mode
+  -x, --proxy URL         Specify proxy URL (e.g., http://user:pass@host:port)
 
 Examples:
   ask "how to find large files"

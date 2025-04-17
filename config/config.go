@@ -23,6 +23,7 @@ type Config struct {
 	Provider    string  `yaml:"provider"`
 	Temperature float64 `yaml:"temperature"` // Temperature for generation
 	MaxTokens   uint    `yaml:"max_tokens"`  // Max tokens for generation
+	Proxy       string  `yaml:"proxy"`       // Proxy URL (e.g., http://user:pass@host:port)
 }
 
 // LoadConfig loads configuration from the specified path
@@ -57,7 +58,10 @@ model_name: "gpt-4o-mini"               # Default AI model to use
 
 # Model parameters(only use at conversation mode)
 temperature: 0.7                        # Temperature for chat mode (0.0-1.0, lower is more deterministic)
-max_tokens: 3000                           # Max tokens for chat mode 
+max_tokens: 3000                        # Max tokens for chat mode 
+
+# Network configuration
+proxy: ""                               # Proxy URL (e.g., http://user:pass@host:port or socks5://host:port)
 
 # Feature configuration
 private_mode: false                     # Set to true to not send directory structure

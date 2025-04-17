@@ -147,11 +147,11 @@ Before using Ask Terminal AI, you need to create a configuration file.
 | `-u, --url URL`       | Temporarily specify API base URL                                           |
 | `-k, --key KEY`       | Temporarily specify API key                                                |
 | `-s, --sys-prompt TEXT` | Temporarily specify system prompt                                       |
+| `-x, --proxy URL`     | Specify proxy URL (e.g., http://user:pass@host:port)                      |
 | `--private-mode`      | Enable privacy mode                                                       |
 | `-v, --version`       | Show version information                                                  |
 | `-h, --help`          | Show help information                                                     |
 | `-show`               | Show command history                                                      |
-
 ---
 
 ### Example with Options
@@ -180,21 +180,27 @@ ask --model gpt-4 --sys-prompt "I'm using Ubuntu 22.04" "how to install Docker"
 ## Develop
 
 ### generate go mod and sum
-`go mod init ask_terminal && go mod tidy`
+```
+go mod init ask_terminal && go mod tidy
+```
 
 ### Build with stripping and optimization flags 
-`go build -ldflags="-s -w" -o ask.exe  main.go`
+```
+go build -ldflags="-s -w" -o ask.exe  main.go
+```
 
 
 ### Use UPX to compress the binary (install UPX first)
-`upx --best ask.exe`
+```
+upx --best ask.exe
+```
 (`choco install upx`)
 
 
 ## Future Plans
 - Support multi-turn conversations
 - Support (i18n) 
-- Support proxy
+- ✓ Support proxy
 
 ## License
 

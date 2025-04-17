@@ -11,13 +11,15 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"net/url"
 	"strings"
 )
 
 type OpenAIAdapter struct {
-	baseURL string
-	apiKey  string
-	client  *http.Client
+	baseURL  string
+	apiKey   string
+	proxyURL string
+	client   *http.Client
 }
 
 func NewOpenAIAdapter() *OpenAIAdapter {
@@ -26,7 +28,7 @@ func NewOpenAIAdapter() *OpenAIAdapter {
 	}
 }
 
-func (a *OpenAIAdapter) Init(baseURL, apiKey string) error {
+func (a *OpenAIAdapter) Init(baseURL, apiKey string, proxyURL string) error {
 	if apiKey == "" {
 		return fmt.Errorf("apiKey cannot be empty")
 	}
@@ -39,6 +41,22 @@ func (a *OpenAIAdapter) Init(baseURL, apiKey string) error {
 	// Ensure URL ends with a "/" for proper endpoint joining
 	a.baseURL = strings.TrimRight(baseURL, "/") + "/"
 	a.apiKey = apiKey
+	a.proxyURL = proxyURL
+
+	// Create HTTP client with proxy if specified
+	if proxyURL != "" {
+		proxyURLParsed, err := url.Parse(proxyURL)
+		if err != nil {
+			return fmt.Errorf("invalid proxy URL: %w", err)
+		}
+		transport := &http.Transport{
+			Proxy: http.ProxyURL(proxyURLParsed),
+		}
+		a.client = &http.Client{Transport: transport}
+	} else {
+		a.client = &http.Client{}
+	}
+
 	return nil
 }
 

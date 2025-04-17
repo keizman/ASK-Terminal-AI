@@ -24,6 +24,7 @@ var (
 	maxTokens   uint
 	privateMode bool
 	showHistory bool
+	proxyURL    string // Add this line
 )
 
 var rootCmd = &cobra.Command{
@@ -78,6 +79,10 @@ var rootCmd = &cobra.Command{
 			conf.PrivateMode = true
 		}
 
+		if proxyURL != "" {
+			conf.Proxy = proxyURL
+		}
+
 		// Check if a query is provided
 		if len(args) > 0 {
 			// Join all args to form the query
@@ -107,6 +112,9 @@ func init() {
 	// Existing boolean flags
 	rootCmd.PersistentFlags().BoolVar(&privateMode, "private-mode", false, "Enable private mode")
 	rootCmd.PersistentFlags().BoolVar(&showHistory, "show", false, "Show recent command history")
+
+	// Add proxyURL flag
+	rootCmd.PersistentFlags().StringVarP(&proxyURL, "proxy", "x", "", "Proxy URL (e.g., http://user:pass@host:port)")
 }
 
 func Execute() {

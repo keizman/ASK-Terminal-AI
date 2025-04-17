@@ -13,7 +13,7 @@ type AIAdapter interface {
 // Adapter defines the complete adapter interface for API interactions
 type Adapter interface {
 	// Initialize the adapter with configuration
-	Init(baseURL, apiKey string) error
+	Init(baseURL, apiKey string, proxyURL string) error
 
 	// Send a chat completion request
 	ChatCompletion(ctx context.Context, request *dto.GeneralOpenAIRequest) (*dto.OpenAITextResponse, error)

@@ -11,7 +11,7 @@ func NewAdapter(conf *config.Config) (Adapter, error) { // Use the Adapter type 
 	// For now, we only support OpenAI-compatible adapter
 	if conf.Provider == "openai-compatible" || conf.Provider == "" {
 		adapter := NewOpenAIAdapter()
-		err := adapter.Init(conf.BaseURL, conf.APIKey)
+		err := adapter.Init(conf.BaseURL, conf.APIKey, conf.Proxy)
 		if err != nil {
 			return nil, fmt.Errorf("failed to initialize adapter: %w", err) // Wrap error for context
 		}
